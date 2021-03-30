@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script launches a batch of walk clients on the nodes running tservers.
+# All settings for this test are in acc_test.conf.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+echo ""
+echo "This script launches batchwalk clients on the nodes running tservers."
+echo "All options are set in acc_test.conf"
+echo "The number of batchwalk clients per node: $WALK_CLI_NODE"
+echo "The Sleep time between scans (in ms). Recommend 0-10000: $DEL_BTWN_WALKS"
+echo "The Scan batch size. Recommend 0-10000: $SCAN_BATCH_SIZE"
+echo ""
+
+# Loop through each tserver node and launch batch walk clients on each
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/batchwalk_clients.pid"
+for node in $ACC_TSERVER_NODES
+do
+  # Remove any old logs
+  pdsh -w $node "rm $LOCAL_NVME1/$ACC_LOG_DIR/batchwalk_* 2>/dev/null" 2>/dev/null
+  for (( i=1; i<=$WALK_CLI_NODE; i++ ))
+  do
+    echo "Starting batch walk client-${i} on $node"
+    LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/batchwalk_${node}_${i}.log"
+    ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/batchwalk_${node}_${i}.err"
+    pdsh -w $node "nohup cingest batchwalk -o test.ci.batch.walker.sleep.ms=$DEL_BTWN_WALKS \
+                   -o test.ci.batch.walker.batch.size=$SCAN_BATCH_SIZE >$LOGFILE 2>$ERRFILE < /dev/null &"
+  done
+  pdsh -w $node "ps -fu $LOGNAME | grep '\ batchwalk\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+done

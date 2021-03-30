@@ -1,0 +1,121 @@
+20a21,140
+>   <property>
+>     <name>yarn.app.mapreduce.am.log.level</name>
+>     <value>ERROR</value>
+>     <description>
+>       The logging level for the MR ApplicationMaster. 
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.map.log.level</name>
+>     <value>ERROR</value>
+>     <description>
+>       he logging level for the map task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.reduce.log.level</name>
+>     <value>ERROR</value>
+>     <description>
+>       he logging level for the reduce task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.app.mapreduce.am.env</name>
+>     <value>HADOOP_MAPRED_HOME=HADOOP_HOME_PATH</value>
+>     <description>
+>       Full path to hadoop distribution directory
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.map.env</name>
+>     <value>HADOOP_MAPRED_HOME=HADOOP_HOME_PATH</value>
+>     <description>
+>       Full path to hadoop distribution directory
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.reduce.env</name>
+>     <value>HADOOP_MAPRED_HOME=HADOOP_HOME_PATH</value>
+>     <description>
+>       Full path to hadoop distribution directory
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.map.java.opts</name>
+>     <value>-XmxMAPRED_MAP_JOPTm</value>
+>     <description>
+>       The amount of memory to request from the scheduler for each map task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.reduce.java.opts</name>
+>     <value>-XmxMAPRED_RED_JOPTm</value>
+>     <description>
+>       The amount of memory to request from the scheduler for each reduce task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.map.memory.mb</name>
+>     <value>MAPRED_MAP_MEM</value>
+>     <description>
+>       The memory limit for each map task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.reducemap.memory.mb</name>
+>     <value>MAPRED_RED_MEM</value>
+>     <description>
+>       The memory limit for each reduce task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.framework.name</name>
+>     <value>yarn</value>
+>     <description>
+>       The runtime framework for executing MapReduce jobs.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.app.mapreduce.am.staging-dir</name>
+>     <value>/yarn/tmp/hadoop-yarn/staging</value>
+>     <description>
+>       The staging dir on HDFS used while submitting jobs.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.app.mapreduce.am.resource.cpu-vcores</name>
+>     <value>YARN_AM_VCORES</value>
+>     <description>
+>       The number of virtual CPU cores the MR AppMaster needs.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.map.cpu.vcores</name>
+>     <value>MAPRED_MAP_VCORES</value>
+>     <description>
+>       The number of virtual cores to request from the scheduler for each map task.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>mapreduce.reduce.cpu.vcores</name>
+>     <value>MAPRED_RED_VCORES</value>
+>     <description>
+>       The number of virtual cores to request from the scheduler for each reduce task.
+>     </description>
+>   </property>
+> 

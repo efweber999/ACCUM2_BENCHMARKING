@@ -1,0 +1,556 @@
+#!/bin/bash
+
+# March 2021 - Gene Weber
+# This script installs all software necessary to run an Accumulo 2.0.1 baseline test.
+# This includes: Maven 3.6.3, Zookeeper 3.6.2, hadoop 3.1.2, accumulo 2.0.1, and accumulo-testing 2.0
+
+# These scripts should be relatively Linux hardware platform independent.
+# All configuration in done in the acc_test.conf file.
+
+# Assumptions/Requirements:
+# 1. These scripts were tested with openjdk 1.8.
+# 2. These scripts require gcc version 5.1 or greater for accumulo native library compile.
+# 3. These scripts require pdsh.
+# 4. These scripts require patch.
+# 5. These scripts require that the user have read, write, and execute permission on local NVMe drives.
+# 6. These scripts assume CentOS 7.
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Run some checks and tests before starting actual installation
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+# Check that required software tools are installed. Add tools to be checked with space between each.
+for tool in pdsh gcc java patch pkill
+do
+  if ! command -v $tool &> /dev/null
+  then
+    echo ""
+    echo "$tool is not installed. Please install as it is required by this script."
+    echo ""
+    exit 1
+  fi
+done
+
+# Check that required environment variables are set. Add variables to be checked with space between each.
+for env_var in JAVA_HOME
+do
+  if [ -z "`printenv $env_var`" ]; then
+    echo ""
+    echo "Environmental variable $env_var is not set. This is required by this script."
+    echo ""
+    exit 1
+  fi
+done
+
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Use first needed varible as crude check to see if configuration file was setup.
+if [ -z "$INSTALL_DIR" ]; then
+  echo ""
+  echo "\$INSTALL_DIR variable is not set. Please ensure all variables in acc_test.conf are properly configured."
+  echo ""
+  exit 1
+fi
+
+# Check to see that installation directory exists.
+if [ ! -d "$INSTALL_DIR" ]; then
+  echo ""
+  echo "The specified installation directory, $INSTALL_DIR does not exist. Please check acc_test.conf"
+  echo ""
+  exit 1
+fi
+
+# Verify that all needed tar and zip files exist.
+ALL_PRESENT=true
+if [ ! -f $HADOOP ]; then
+  ALL_PRESENT=false
+  echo ""
+  echo "$HADOOP is not present. It can be downloaded here:"
+  echo "https://archive.apache.org/dist/hadoop/common/"
+  echo ""
+fi
+if [ ! -f $ZOOKEEPER ]; then
+  ALL_PRESENT=false
+  echo ""
+  echo "$ZOOKEEPER is not present. It can be downloaded here:"
+  echo "https://zookeeper.apache.org/releases.html"
+  echo ""
+fi
+if [ ! -f $ACCUMULO ]; then
+  ALL_PRESENT=false
+  echo ""
+  echo "$ACCUMULO is not present. It can be downloaded here:"
+  echo "https://accumulo.apache.org/downloads/"
+  echo ""
+fi
+if [ ! -f $ACCUMULO_TESTS ]; then
+  ALL_PRESENT=false
+  echo ""
+  echo "$ACCUMULO_TESTS is not present. It can be downloaded here:"
+  echo "https://github.com/apache/accumulo-testing"
+  echo ""
+fi
+if [ ! -f $MAVEN ]; then
+  ALL_PRESENT=false
+  echo ""
+  echo "$MAVEN is not present. It can be downloaded here:"
+  echo "https://maven.apache.org/download.cgi"
+  echo ""
+fi
+if [ $ALL_PRESENT = false ]; then
+  echo " Please install the needed tar and/or zip files."
+  echo ""
+  exit 1
+fi
+
+# Verify that Open Files ulimits are set high enough.
+if [ "`ulimit -Hn`" -lt "$OF_ULIMIT" ]  || [ "`ulimit -Sn`" -lt "$OF_ULIMIT" ]; then
+  echo ""
+  echo "The soft and hard limits for number of open files must be greater than or equal"
+  echo "to $OF_ULIMIT. Edit /etc/security/limits.conf and set the following:"
+  echo "$LOGNAME		soft	nofile		$OF_ULIMIT"
+  echo "$LOGNAME		hard	nofile		$OF_ULIMIT"
+  echo ""
+  exit 1
+fi
+
+# If this is running on AWS, set up the NVMe drives.
+# If it's not AWS assume the NVMe drives are already mounted.
+if [ "$AWS" = true ]; then
+  echo ""
+  echo "Preparing local drives."
+  echo ""
+  set $NVME_DRIVES
+  for drive in $NVME_MOUNTS
+  do
+    # Check if the NVMe drive is already mounted
+    # NOTE: Checking local node and assuming all nodes are in the same state.
+    grep -qs "/$drive" /proc/mounts
+    if [ "$?" -eq "0" ]; then
+      # If it is, delete everything on all local drives
+      pdsh -w ^$INSTALL_DIR/all_nodes "sudo rm -r /$drive/* 2>/dev/null" 2>/dev/null
+    else
+      # Mount all the NVMe drives
+      pdsh -w ^$INSTALL_DIR/all_nodes "sudo mkfs -t ext4 /dev/$1"
+      pdsh -w ^$INSTALL_DIR/all_nodes "sudo tune2fs -o journal_data_writeback /dev/$1"
+      pdsh -w ^$INSTALL_DIR/all_nodes "sudo tune2fs -O ^has_journal /dev/$1"
+      pdsh -w ^$INSTALL_DIR/all_nodes "sudo mount -t ext4 -O noatime,nodiratime,data=writeback /dev/$1 /$drive"
+    fi
+    # Set permissions
+    pdsh -w ^$INSTALL_DIR/all_nodes "sudo chmod 777 /$drive"
+    shift
+  done
+fi
+
+# Check for user read, write, and execute permission on local drives.
+echo ""
+echo "Checking for user read, write, and execute permission on local drives."
+echo ""
+PERMISSIONS=true
+for drive in $NVME_MOUNTS
+do
+  for node in `cat $INSTALL_DIR/all_nodes`
+  do
+    if [ "`pdsh -w $node "stat -c %a /$drive" | sed 's/^.*: //'`" != "777" ]; then
+      PERMISSIONS=false
+    fi
+  done
+done
+if [ $PERMISSIONS = false ]; then
+  echo ""
+  echo "User does not have read, write, and execute permission on local drives of all nodes."
+  echo ""
+  exit 1
+fi
+
+# Check that system swappiness is zero
+echo ""
+echo "Checking that system swapiness for all nodes is zero."
+echo ""
+TEMP="0"
+for node in `cat $INSTALL_DIR/all_nodes`
+do
+  SWAPPINESS=`pdsh -w $node "cat /proc/sys/vm/swappiness" | sed 's/^.*: //'`
+  echo "$node = $SWAPPINESS"
+  if [ "$SWAPPINESS" != "0" ]; then
+    TEMP=$SWAPPINESS
+  fi
+done
+if [ "$TEMP" != "0" ]; then
+  echo ""
+  echo "Swappiness of all nodes must be set to zero."
+  echo "sudo sysctl vm.swappiness=0"
+  echo ""
+  exit 1
+fi
+
+# Confirm installation before proceeding.
+echo ""
+echo "    >>> `java -version 2>&1 | grep version`"
+echo "    >>> `gcc --version 2>&1 | grep gcc`"
+echo "NOTE: This script was tested with openjdk 1.8, and requires gcc 5.1 or greater."
+echo ""
+read -p "Software will be installed at $INSTALL_DIR. Proceed (y/n): " ANS
+if [ "$ANS" != "y" ]; then
+  echo "Goodbye"
+  echo ""
+  exit 0
+fi
+
+# Create needed directories on local NVMe drives
+echo ""
+echo "Creating required directories on local drives."
+echo ""
+# Clean up from any previous run.
+if [[ -d "/$LOCAL_NVME1/tmp" ]]; then
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/tmp"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/pids"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/data"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/hadoop"
+fi
+# Create directories
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/tmp"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/pids"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/hadoop"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/zookeeper"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/accumulo"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/accumulo/logs"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/hadoop"
+pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/hadoop/tmp"
+
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Start Hadoop Installation and Configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo ""
+echo "Installing and configuring Hadoop."
+echo ""
+
+# Untar Hadoop
+if [ ! -d $HADOOP_HOME ]; then
+  tar -xvf $HADOOP -C $INSTALL_DIR
+fi
+cp -n $HADOOP_HOME/etc/hadoop/core-site.xml $HADOOP_HOME/etc/hadoop/orig_core-site.xml
+cp -n $HADOOP_HOME/etc/hadoop/hadoop-env.sh $HADOOP_HOME/etc/hadoop/orig_hadoop-env.sh
+cp -n $HADOOP_HOME/etc/hadoop/hdfs-site.xml $HADOOP_HOME/etc/hadoop/orig_hdfs-site.xml
+cp -n $HADOOP_HOME/etc/hadoop/mapred-site.xml $HADOOP_HOME/etc/hadoop/orig_mapred-site.xml
+cp -n $HADOOP_HOME/etc/hadoop/yarn-env.sh $HADOOP_HOME/etc/hadoop/orig_yarn-env.sh
+cp -n $HADOOP_HOME/etc/hadoop/yarn-site.xml $HADOOP_HOME/etc/hadoop/orig_yarn-site.xml
+
+# Create Hadoop node files
+echo $HADOOP_NAME_NODE > $INSTALL_DIR/had_nam_node
+echo $HADOOP_RESOURCE_NODE > $INSTALL_DIR/had_rsc_node
+rm $INSTALL_DIR/had_wkr_nodes 2> /dev/null > /dev/null
+for node in $HADOOP_WORKER_NODES
+do
+  echo $node >> $INSTALL_DIR/had_wkr_nodes
+done
+cat $INSTALL_DIR/had_rsc_node $INSTALL_DIR/had_wkr_nodes > $INSTALL_DIR/pdsh_nodes
+cat $INSTALL_DIR/had_nam_node $INSTALL_DIR/pdsh_nodes > $INSTALL_DIR/all_nodes
+
+# Create the Hadoop DFS data node directory comma separated list of NVME drives.
+DATA_NODE_LIST=""
+for drive in $NVME_MOUNTS
+do
+  if [ -z "$DATA_NODE_LIST" ]; then
+    DATA_NODE_LIST="file:///${drive}/hadoop/tmp/dfs/data"
+  else
+    DATA_NODE_LIST="${DATA_NODE_LIST},file:///${drive}/hadoop/tmp/dfs/data"
+  fi
+done
+
+# Create Hadoop configuration patch files.
+cat patch/core-site.xml.base |\
+ sed "s/HADOOP_NAME_NODE/$HADOOP_NAME_NODE/" |\
+ sed "s|TMP_HADOOP_DIRS|$TMP_HADOOP_DIRS|" |\
+ sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ > patch/core-site.xml.patch
+cat patch/hadoop-env.sh.base |\
+ sed "s|JAVA_HOME_PATH|$JAVA_HOME|" |\
+ sed "s/LOCAL_NVME1/$LOCAL_NVME1/" |\
+ sed "s/H_PID_DIR/$H_PID_DIR/" |\
+ sed "s|H_LOG_DIR|$H_LOG_DIR|" |\
+ sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
+ sed "s/HAD_HIS_HEAP/$HAD_HIS_HEAP/" |\
+ sed "s/HAD_NAM_HEAP/$HAD_NAM_HEAP/" |\
+ sed "s/HAD_DAT_HEAP/$HAD_DAT_HEAP/" \
+ > patch/hadoop-env.sh.patch
+cat patch/yarn-site.xml.base |\
+ sed "s/HADOOP_RESOURCE_NODE/$HADOOP_RESOURCE_NODE/" |\
+ sed "s/YARN_MR_RES/$YARN_MR_RES/" |\
+ sed "s/YARN_SCH_MIN/$YARN_SCH_MIN/" |\
+ sed "s/YARN_SCH_MAX/$YARN_SCH_MAX/" |\
+ sed "s/YARN_NM_RES/$YARN_NM_RES/" |\
+ sed "s|WORKER_NODES_FILE|$INSTALL_DIR/had_wkr_nodes|" |\
+ sed "s/YARN_VCORES_MIN/$YARN_VCORES_MIN/" |\
+ sed "s/YARN_VCORES_MAX/$YARN_VCORES_MAX/" \
+ > patch/yarn-site.xml.patch
+cat patch/mapred-site.xml.base |\
+ sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
+ sed "s/MAPRED_MAP_JOPT/$MAPRED_MAP_JOPT/" |\
+ sed "s/MAPRED_MAP_MEM/$MAPRED_MAP_MEM/" |\
+ sed "s/MAPRED_RED_JOPT/$MAPRED_RED_JOPT/" |\
+ sed "s/MAPRED_RED_MEM/$MAPRED_RED_MEM/" |\
+ sed "s/YARN_AM_VCORES/$YARN_AM_VCORES/" |\
+ sed "s/MAPRED_MAP_VCORES/$MAPRED_MAP_VCORES/" |\
+ sed "s/MAPRED_RED_VCORES/$MAPRED_RED_VCORES/" \
+ > patch/mapred-site.xml.patch
+cat patch/hdfs-site.xml.base |\
+ sed "s|DATA_NODE_LIST|$DATA_NODE_LIST|" |\
+ sed "s/RESERVED_SPACE/$RESERVED_SPACE/" |\
+ sed "s|OOO_WR_DIR|$OOO_WR_DIR|" |\
+ sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ > patch/hdfs-site.xml.patch
+cat patch/yarn-env.sh.base |\
+ sed "s/YARN_RM_HEAP/$YARN_RM_HEAP/" |\
+ sed "s/YARN_NM_HEAP/$YARN_NM_HEAP/" |\
+ sed "s/YARN_NM_JOPT/$YARN_NM_JOPT/" |\
+ sed "s/YARN_PRX_HEAP/$YARN_PRX_HEAP/" \
+ > patch/yarn-env.sh.patch
+
+# Patch Hadoop configuration files.
+patch $HADOOP_HOME/etc/hadoop/core-site.xml patch/core-site.xml.patch
+patch $HADOOP_HOME/etc/hadoop/hadoop-env.sh patch/hadoop-env.sh.patch
+patch $HADOOP_HOME/etc/hadoop/yarn-site.xml patch/yarn-site.xml.patch
+patch $HADOOP_HOME/etc/hadoop/mapred-site.xml patch/mapred-site.xml.patch
+patch $HADOOP_HOME/etc/hadoop/hdfs-site.xml patch/hdfs-site.xml.patch
+patch $HADOOP_HOME/etc/hadoop/yarn-env.sh patch/yarn-env.sh.patch
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Start Zookeeper Installation and Configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo ""
+echo "Installing and configuring Zookeeper"
+echo ""
+
+# Untar Zookeeper
+if [ ! -d $ZOO_HOME ]; then
+  tar -xvf $ZOOKEEPER -C $INSTALL_DIR
+  mv `find $INSTALL_DIR/* -maxdepth 0 -type d  | grep zookeeper` $ZOO_HOME
+fi
+cp -n $ZOO_HOME/conf/log4j.properties $ZOO_HOME/conf/orig_log4j.properties
+cp $ZOO_HOME/conf/zoo_sample.cfg $ZOO_HOME/conf/zookeeper.cfg 
+
+# Create Zookeeper node file
+rm $INSTALL_DIR/zoo_nodes 2> /dev/null > /dev/null
+for node in $ZOOKEEPER_NODES
+do
+  echo $node >> $INSTALL_DIR/zoo_nodes
+done
+
+# Create Zookeeper configuration patch files.
+# Set Zookeeper node variables for patching
+set $ZOOKEEPER_NODES
+for (( i=1; i<=$NUM_ZOO_NODES; i++ ))
+do
+  export ZOO_USE$i=""
+  export "ZOO_NODE$i=$1"
+  shift
+done
+for (( i=5; i>$NUM_ZOO_NODES; i-- ))
+do
+  export ZOO_USE$i="# "
+  export ZOO_NODE$i=""
+done
+cat patch/zookeeper.cfg.base |\
+ sed "s/ZOO_NODE1/$ZOO_NODE1/" |\
+ sed "s/ZOO_USE2/$ZOO_USE2/" |\
+ sed "s/ZOO_NODE2/$ZOO_NODE2/" |\
+ sed "s/ZOO_USE3/$ZOO_USE3/" |\
+ sed "s/ZOO_NODE3/$ZOO_NODE3/" |\
+ sed "s/ZOO_USE4/$ZOO_USE4/" |\
+ sed "s/ZOO_NODE4/$ZOO_NODE4/" |\
+ sed "s/ZOO_USE5/$ZOO_USE5/" |\
+ sed "s/ZOO_NODE5/$ZOO_NODE5/" |\
+ sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ > patch/zookeeper.cfg.patch
+cat patch/zoo_log4j.properties.base > patch/zoo_log4j.properties.patch
+
+# Patch Zookeeper configuration files.
+patch $ZOO_HOME/conf/zookeeper.cfg patch/zookeeper.cfg.patch
+patch $ZOO_HOME/conf/log4j.properties patch/zoo_log4j.properties.patch
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Start Accumulo Installation and Configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+# Untar Accumulo
+echo ""
+echo "Installing Accumulo"
+echo ""
+
+if [ ! -d $ACCUMULO_HOME ]; then
+  tar -xvf $ACCUMULO -C $INSTALL_DIR
+fi
+cp -n $ACCUMULO_HOME/conf/log4j.properties $ACCUMULO_HOME/conf/orig_log4j.properties
+cp -n $ACCUMULO_HOME/conf/log4j-service.properties $ACCUMULO_HOME/conf/orig_log4j-service.properties
+cp -n $ACCUMULO_HOME/conf/accumulo.properties $ACCUMULO_HOME/conf/orig_accumulo.properties
+cp -n $ACCUMULO_HOME/conf/accumulo-env.sh $ACCUMULO_HOME/conf/orig_accumulo-env.sh
+cp -n $ACCUMULO_HOME/conf/log4j-monitor.properties $ACCUMULO_HOME/conf/orig_log4j-monitor.properties
+cp -n $ACCUMULO_HOME/conf/accumulo-client.properties $ACCUMULO_HOME/conf/orig_accumulo-client.properties
+cp -n $ACCUMULO_HOME/bin/accumulo-service $ACCUMULO_HOME/bin/orig_accumulo-service
+
+# Create Accumulo node files
+rm $INSTALL_DIR/accgcnodes $INSTALL_DIR/accmasternodes $INSTALL_DIR/accmonitornodes \
+   $INSTALL_DIR/acctracernodes $INSTALL_DIR/acctservernodes 2> /dev/null > /dev/null
+for node in $ACC_GC_NODES
+do
+  echo $node >> $INSTALL_DIR/accgcnodes
+done
+for node in $ACC_MASTER_NODES
+do
+  echo $node >> $INSTALL_DIR/accmasternodes
+done
+for node in $ACC_MON_NODES
+do
+  echo $node >> $INSTALL_DIR/accmonitornodes
+done
+for node in $ACC_TRACER_NODES
+do
+  echo $node >> $INSTALL_DIR/acctracernodes
+done
+for node in $ACC_TSERVER_NODES
+do
+  echo $node >> $INSTALL_DIR/acctservernodes
+done
+
+# Create Accumulo configuration patch files.
+cat patch/acc_log4j.properties.base > patch/acc_log4j.properties.patch
+cat patch/acc_log4j-service.properties.base > patch/acc_log4j-service.properties.patch
+cat patch/acc_log4j-monitor.properties.base > patch/acc_log4j-monitor.properties.patch
+cat patch/accumulo-client.properties.base |\
+ sed "s/ACC_DBASE_NAME/$ACC_DBASE_NAME/" |\
+ sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
+ sed "s/ZOO_SESSION_TIMEOUT/$ZOO_SESSION_TIMEOUT/" |\
+ sed "s/ACC_USERNAME/$ACC_USERNAME/" |\
+ sed "s/BATCH_WRITE_TIMEOUT/$BATCH_WRITE_TIMEOUT/" |\
+ sed "s/ACC_PASSWD/$ACC_PASSWD/" \
+ > patch/accumulo-client.properties.patch
+cat patch/accumulo.properties.base |\
+ sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
+ sed "s/DFS_INSTANCE_VOL/$DFS_INSTANCE_VOL/" |\
+ sed "s/TSERV_PORT_CLIENT/$TSERV_PORT_CLIENT/" \
+ > patch/accumulo.properties.patch
+cat patch/accumulo-env.sh.base |\
+ sed "s/LOCAL_NVME1/$LOCAL_NVME1/" |\
+ sed "s|ACC_LOG_DIR|$ACC_LOG_DIR|" |\
+ sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
+ sed "s|HADOOP_CONF_DIR_PATH|$HADOOP_CONF_DIR|" |\
+ sed "s|ZOOKEEPER_HOME_PATH|$ZOO_HOME|" \
+ > patch/accumulo-env.sh.patch
+cat patch/accumulo-service.base |\
+ sed "s|PIDS_DIR|/$LOCAL_NVME1/$A_PID_DIR|" |\
+ sed "s|ACC_LOG_DIR|/$LOCAL_NVME1/$ACC_LOG_DIR|" \
+ > patch/accumulo-service.patch
+
+# Patch Accumulo configuration files.
+patch $ACCUMULO_HOME/conf/log4j.properties patch/acc_log4j.properties.patch
+patch $ACCUMULO_HOME/conf/log4j-service.properties patch/acc_log4j-service.properties.patch
+patch $ACCUMULO_HOME/conf/accumulo.properties patch/accumulo.properties.patch
+patch $ACCUMULO_HOME/conf/accumulo-env.sh patch/accumulo-env.sh.patch
+patch $ACCUMULO_HOME/conf/log4j-monitor.properties patch/acc_log4j-monitor.properties.patch
+patch $ACCUMULO_HOME/conf/accumulo-client.properties patch/accumulo-client.properties.patch
+patch $ACCUMULO_HOME/bin/accumulo-service patch/accumulo-service.patch
+
+# Compile Accumulo native libraries if they don't exist
+if [ ! -d "$ACCUMULO_HOME/lib/native" ]; then
+  HERE=`pwd`
+  # Upgrade gcc for centos7 if this is running on AWS
+  if [ "$AWS" = true ]; then
+    source /opt/rh/devtoolset-8/enable
+  fi
+  cd $ACCUMULO_HOME
+  ./bin/accumulo-util build-native
+  cd $HERE
+fi
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Start Maven Installation and Configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+# Untar Maven
+echo ""
+echo "Installing Maven"
+echo ""
+
+if [ ! -d $MAVEN_HOME ]; then
+  tar -xvf $MAVEN -C $INSTALL_DIR
+fi
+
+# vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Start Accumulo 2.0 Tests Installation and Configuration
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+echo ""
+echo "Installing Accumulo 2.0 Tests"
+echo ""
+
+# Unzip Accumulo
+INSTALL_TESTS=false
+if [ ! -d $ACCUMULO_TESTS_HOME ]; then
+  INSTALL_TESTS=true
+  HERE=`pwd`
+  cd $INSTALL_DIR
+  unzip $HERE/$ACCUMULO_TESTS
+  cd $HERE
+fi
+cp -n $ACCUMULO_TESTS_HOME/conf/log4j.properties $ACCUMULO_TESTS_HOME/conf/orig_log4j.properties
+cp -n $ACCUMULO_TESTS_HOME/conf/accumulo-testing.properties $ACCUMULO_TESTS_HOME/conf/orig_accumulo-testing.properties
+cp -n $ACCUMULO_TESTS_HOME/conf/env.sh $ACCUMULO_TESTS_HOME/conf/orig_env.sh
+
+# Create Accumulo Tests configuration patch files.
+cat patch/acc_tests_log4j.properties.base > patch/acc_tests_log4j.properties.patch
+cat patch/accumulo-testing.properties.base |\
+ sed "s/HADOOP_NAME_NODE/$HADOOP_NAME_NODE/" |\
+ sed "s/HADOOP_RESOURCE_NODE/$HADOOP_RESOURCE_NODE/" |\
+ sed "s/YARN_SCH_MAX/$YARN_SCH_MAX/" |\
+ sed "s/YARN_VCORES_MAX/$YARN_VCORES_MAX/" \
+ > patch/accumulo-testing.properties.patch
+cat patch/acc_tests_env.sh.base |\
+ sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
+ sed "s|ACCUMULO_HOME_PATH|$ACCUMULO_HOME|" |\
+ sed "s|ACCUMULO_TESTS_HOME_PATH|$ACCUMULO_TESTS_HOME|g" \
+ > patch/acc_tests_env.sh.patch
+
+# Patch Accumulo Tests configuration files.
+patch $ACCUMULO_TESTS_HOME/conf/accumulo-testing.properties patch/accumulo-testing.properties.patch
+patch $ACCUMULO_TESTS_HOME/conf/env.sh patch/acc_tests_env.sh.patch
+patch $ACCUMULO_TESTS_HOME/conf/log4j.properties patch/acc_tests_log4j.properties.patch
+
+# If this is a new installation of the accumulo tests, build the shaded jars.
+if [ $INSTALL_TESTS = true ]; then
+  echo ""
+  echo "Building Apache Accumulo Testing SNAPSHOTs"
+  echo ""
+ $ACCUMULO_TESTS_HOME/bin/build
+fi
+
+#vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+# >>> Clean up and Misc
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+echo ""
+echo "Cleaning Up"
+echo ""
+
+# Cleanup patch directory
+rm patch/*.patch
+
+# Save copy & Modify .bashrc to setup path and environmental variables
+pdsh -w ^$INSTALL_DIR/all_nodes 'cp -n $HOME/.bashrc $HOME/.good_bashrc'
+pdsh -w ^$INSTALL_DIR/all_nodes "echo 'source $INSTALL_DIR/acc_env_vars' >> $HOME/.bashrc"
+source $HOME/.bashrc
+
+echo ""
+echo "Worker node has a total memory = $TOTAL_MEM megabytes."
+echo "Node has $VCPUS CPUs."
+echo ""
+
+echo ""
+echo "Before launching this script again, you must run the reset script."
+echo "If this looked successful, you can launch the start_hadoop script."
+echo ""

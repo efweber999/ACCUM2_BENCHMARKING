@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script stops the walk clients on the nodes running tservers.
+# All settings for this test are in acc_test.conf.
+
+# Call generic stop clients script specifying walk.
+./stop_clients walk

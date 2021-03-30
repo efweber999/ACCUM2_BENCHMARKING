@@ -1,0 +1,14 @@
+16c16
+< log4j.rootLogger=INFO, CA
+---
+> log4j.rootLogger=ERROR, CA
+21,22c21,22
+< log4j.logger.org.apache.accumulo=WARN
+< log4j.logger.org.apache.accumulo.testing=INFO
+---
+> log4j.logger.org.apache.accumulo=ERROR
+> log4j.logger.org.apache.accumulo.testing=ERROR
+24c24
+< log4j.logger.org.apache.hadoop=WARN
+---
+> log4j.logger.org.apache.hadoop=ERROR

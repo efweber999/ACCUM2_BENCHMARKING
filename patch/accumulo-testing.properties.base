@@ -1,0 +1,16 @@
+21c21
+< test.common.hdfs.root=hdfs://localhost:8020
+---
+> test.common.hdfs.root=hdfs://HADOOP_NAME_NODE:9000
+23c23
+< test.common.yarn.resource.manager=localhost
+---
+> test.common.yarn.resource.manager=HADOOP_RESOURCE_NODE
+25c25
+< test.common.yarn.container.memory.mb=1024
+---
+> test.common.yarn.container.memory.mb=YARN_SCH_MAX
+27c27
+< test.common.yarn.container.cores=1
+---
+> test.common.yarn.container.cores=YARN_VCORES_MAX

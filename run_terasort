@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# March 2021 - Gene Weber
+# This script uses hadoop mapreduce to run terasort
+# https://s905060.gitbooks.io/site-reliability-engineer-handbook/content/terasort_benchmark_suite.html
+# Settings are in acc_test.conf
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+
+# Run mapreduce job
+# generate data for terasort.
+date
+yarn jar $MAPR teragen $TERASORT_ROWS tera_unsorted
+# run terasort map/reduce.
+date
+yarn jar $MAPR terasort tera_unsorted tera_sorted
+# validate that terasort ran correctly.
+date
+yarn jar $MAPR teravalidate tera_sorted tera_validated
+date
+
+# Clean up so it can be run again
+echo ""
+echo "To run any part of this test again, the associated output file must be deleted."
+echo "hdfs dfs -rm -r /user/$LOGNAME/tera_unsorted"
+echo "hdfs dfs -rm -r /user/$LOGNAME/tera_sorted"
+echo "hdfs dfs -rm -r /user/$LOGNAME/tera_validated"
+

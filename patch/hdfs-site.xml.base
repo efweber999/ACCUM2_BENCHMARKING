@@ -1,0 +1,33 @@
+20a21,52
+>   <property>
+>     <name>dfs.datanode.data.dir</name>
+>     <value>DATA_NODE_LIST</value>
+>     <description>
+>       	Determines where on the local filesystem an DFS data node should store its blocks.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>dfs.datanode.du.reserved</name>
+>     <value>RESERVED_SPACE</value>
+>     <description>
+>       	Reserved space in bytes per volume. Always leave this much space free for non dfs use.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>nfs.dump.dir</name>
+>     <value>/LOCAL_NVME1/OOO_WR_DIR</value>
+>     <description>
+>       	This directory is used to temporarily save out-of-order writes before writing to HDFS.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>dfs.replication</name>
+>     <value>1</value>
+>     <description>
+>       	HDFS default block replication. Since this is a test resiliancy unimportant.
+>     </description>
+>   </property>
+> 

@@ -1,0 +1,8 @@
+30c30
+< log4j.appender.gui.Threshold=WARN
+---
+> log4j.appender.gui.Threshold=ERROR
+36c36
+< log4j.rootLogger=INFO, file
+---
+> log4j.rootLogger=ERROR, file

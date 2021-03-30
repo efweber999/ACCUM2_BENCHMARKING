@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script simply launches the moru_table script on the specified node.
+# See the moru_table script for more information.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Only move files and run via pdsh if running on a differnt node than logged into
+if [[ "$MT_NODE" != "$LOCAL_NODE" ]]; then
+  cp inst_dir moru_table acc_test.conf $INSTALL_DIR
+  pdsh -w $MT_NODE 'cp /nfs/software/test/inst_dir .'
+  pdsh -w $MT_NODE 'cp /nfs/software/test/moru_table .'
+  pdsh -w $MT_NODE 'cp /nfs/software/test/acc_test.conf .'
+  pdsh -w $MT_NODE './moru_table'
+  rm $INSTALL_DIR/inst_dir $INSTALL_DIR/moru_table $INSTALL_DIR/acc_test.conf 2>/dev/null
+  pdsh -w $MT_NODE 'rm inst_dir moru_table acc_test.conf'
+else
+  ./moru_table
+fi

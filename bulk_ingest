@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script runs bulk ingest. A map reduce job
+# generates rfiles based on number of table splits setting.
+# Nodes are generated per map task. Map tasks are run each loop.
+# All settings for this test are in acc_test.conf.
+
+# Info at:
+# https://github.com/apache/accumulo-testing/blob/main/docs/bulk-test.md
+#
+# Optionally, consider lowering the split threshold to make splits happen more 
+# frequently while the test runs.  Choose a threshold base on the amount of data
+# being imported and the desired number of splits.
+# 
+#   accumulo shell -u root -p secret -e 'config -t ci -s table.split.threshold=32M'
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Remove any files from previous runs.
+echo ""
+echo "Removing any files from previous runs."
+hdfs dfs -rm -r -f /tmp/ci-verify 2>/dev/null
+hdfs dfs -rm -r -f /tmp/bt/*/files 2>/dev/null
+rm /$LOCAL_NVME1/$ACC_LOG_DIR/bulk-ingest* 2>/dev/null
+rm /$LOCAL_NVME1/$ACC_LOG_DIR/bulk-verify* 2>/dev/null
+
+echo ""
+echo "This script runs bulk ingest. A map reduce job"
+echo "generates rfiles based on number of table splits setting."
+echo "Nodes are generated per map task. Map tasks are run each loop."
+echo "Change any settings in conf/accumulo-testing.properties"
+echo ""
+echo "All options are set in acc_test.conf"
+echo "Number of map loops to run: $BI_LOOPS"
+echo "Import data each Iteration, or import all data at the End (i/e): $BI_WHEN"
+echo "Verify the ingest table at the end of the run (y/n): $BI_VERIFY"
+echo "Should ingest table be reset at start (y/n): $BI_RESET_TABLE"
+echo ""
+
+if [ "$BI_RESET_TABLE" == "y" ]; then
+  # Create a new Continuous Ingest table in the accumulo database
+  echo ""
+  echo "Re-initializing the Ingest table"
+  echo ""
+  # Check if ci table already exists
+  echo -e "tables\nbye\n" | accumulo shell -u root | grep "^ci$" 2>/dev/null >/dev/null
+  # Delete it if it does
+  if [ "$?" == "0" ]; then
+    echo -e "deletetable ci\nyes\nbye\n" | accumulo shell -u root 2>/dev/null >/dev/null
+  fi
+  # Create a new empty table
+  cingest createtable
+fi
+
+# Run map reduce process the specified number of loops
+for (( i=1; i <= $BI_LOOPS; i++ ))
+do
+  LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/bulk-ingest_${i}.log"
+  ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/bulk-ingest_${i}.err"
+  echo "Running Map Reduce job ${i} of ${BI_LOOPS}"
+  # run map reduce job to generate data for bulk import
+  cingest bulk /tmp/bt/$i >$LOGFILE 2>$ERRFILE < /dev/null 
+  if [ "$BI_WHEN" == "i" ]; then
+    # ask accumulo to import generated data
+    echo "Importing generated data into table ci."
+    echo -e "table ci\nimportdirectory /tmp/bt/$i/files true" | accumulo shell -u root
+    echo ""
+  fi
+done
+
+if [ "$BI_WHEN" == "e" ]; then
+  echo "Importing generated data into table ci."
+  for ((i=1; i<=$BI_LOOPS; i++))
+  do
+    (
+      echo table ci
+      echo "importdirectory /tmp/bt/$i/files true"
+    ) | accumulo shell -u root
+    sleep 5
+  done
+fi
+
+if [ "$BI_VERIFY" == "y" ]; then
+  LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/bulk-verify.log"
+  ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/bulk-verify.err"
+  echo "Verifying ci table using map reduce."
+  nohup cingest verify 2>$LOGFILE >$ERRFILE < /dev/null &
+  echo ""
+fi
+

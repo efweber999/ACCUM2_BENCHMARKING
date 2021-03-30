@@ -1,0 +1,20 @@
+32c32
+< log4j.appender.monitor.Threshold=WARN
+---
+> log4j.appender.monitor.Threshold=ERROR
+43c43
+< ##   INFO
+---
+> ##   ERROR
+45c45
+< ##   INFO, audit
+---
+> ##   ERROR, audit
+54c54
+< log4j.logger.org.apache.accumulo.core.file.rfile.bcfile=INFO
+---
+> log4j.logger.org.apache.accumulo.core.file.rfile.bcfile=ERROR
+58c58
+< log4j.rootLogger=INFO, file
+---
+> log4j.rootLogger=ERROR, file

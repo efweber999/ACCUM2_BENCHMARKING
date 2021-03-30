@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# March 2021 - Gene Weber
+# This script launches Accumulo after running the installation script, and start_hadoop script.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+echo ""
+echo "Initializing a new Accumulo database"
+echo ""
+
+# Initialize a new accumulo database
+pdsh -w ^$INSTALL_DIR/accmasternodes "echo -e '$ACC_DBASE_NAME\n$ACC_PASSWD\n$ACC_PASSWD\n' | accumulo init"
+
+echo ""
+echo "Starting the Accumulo Monitor"
+echo ""
+
+# Start the accumulo monitor
+pdsh -w ^$INSTALL_DIR/accmonitornodes 'accumulo-service monitor start'
+
+echo ""
+echo "Starting the Accumulo Tablet Servers"
+echo ""
+
+# Start the accumulo tablet servers
+for node in $ACC_TSERVER_NODES
+do
+  for (( i=1; i<=$TABS_PER_NODE; i++ ))
+  do
+    echo "Starting tserver-${i} on $node"
+    LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.log"
+    ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.err"
+    pdsh -w $node "nohup accumulo tserver >$LOGFILE 2>$ERRFILE < /dev/null &"
+  done
+done
+# Separate loop gives processes some time to startup
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/tservers.pid"
+for node in $ACC_TSERVER_NODES
+do
+  pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+done
+
+echo ""
+echo "Starting the Accumulo Masters"
+echo ""
+
+# Start the accumulo master
+pdsh -w ^$INSTALL_DIR/accmasternodes 'accumulo-service master start'
+
+echo ""
+echo "Starting the Accumulo Garbage Collector"
+echo ""
+
+# Start the accumulo garbage collector
+pdsh -w ^$INSTALL_DIR/accgcnodes 'accumulo-service gc start'
+
+echo ""
+echo "Starting the Accumulo Tracer"
+echo ""
+
+# Run a command in the accumulo shell as a simple test.
+cat <<EOT | accumulo shell -u root
+tables
+bye
+EOT
+
+# Start the accumulo tracer
+pdsh -w ^$INSTALL_DIR/acctracernodes 'accumulo-service tracer start'
+
+if [ "$AWS" = true ]; then
+  PROXY=`cat $INSTALL_DIR/accmonitornodes | sed 's/^/ip-/' | sed 's/\./-/g' | sed 's/$/\.evoforge\.org/'`
+else
+  PROXY=`cat $INSTALL_DIR/accmonitornodes`
+fi
+echo ""
+echo "You can view Accumulo monitor page at:"
+echo "http://$PROXY:9995/monitor"
+echo ""
+
+echo ""
+echo "If this looked successful you can now run the accumulo_tests script."
+echo "The stop_accumulo script will terminate accumulo processes and clean up."
+echo "NOTE: To run Accumulo commands from the command line you must first: source $INSTALL_DIR/acc_env_vars"
+echo ""

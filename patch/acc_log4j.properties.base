@@ -1,0 +1,16 @@
+26c26
+< log4j.logger.org.apache.accumulo.shell.Shell.audit=WARN
+---
+> log4j.logger.org.apache.accumulo.shell.Shell.audit=ERROR
+29,31c29,31
+< log4j.logger.org.apache.accumulo.core.file.rfile.bcfile.Compression=WARN
+< log4j.logger.org.apache.commons.vfs2.impl.DefaultFileSystemManager=WARN
+< log4j.logger.org.apache.hadoop.io.compress=WARN
+---
+> log4j.logger.org.apache.accumulo.core.file.rfile.bcfile.Compression=ERROR
+> log4j.logger.org.apache.commons.vfs2.impl.DefaultFileSystemManager=ERROR
+> log4j.logger.org.apache.hadoop.io.compress=ERROR
+38c38
+< log4j.rootLogger=INFO, console
+---
+> log4j.rootLogger=ERROR, console

@@ -1,0 +1,18 @@
+20c20
+< zookeeper.root.logger=INFO, CONSOLE
+---
+> zookeeper.root.logger=ERROR, CONSOLE
+22c22
+< zookeeper.console.threshold=INFO
+---
+> zookeeper.console.threshold=ERROR
+26c26
+< zookeeper.log.threshold=INFO
+---
+> zookeeper.log.threshold=ERROR
+70,71c70,71
+< zookeeper.auditlog.threshold=INFO
+< audit.logger=INFO, RFAAUDIT
+---
+> zookeeper.auditlog.threshold=ERROR
+> audit.logger=ERROR, RFAAUDIT

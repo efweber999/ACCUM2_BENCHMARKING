@@ -1,0 +1,12 @@
+20c20
+< instance.volumes=hdfs://localhost:8020/accumulo
+---
+> instance.volumes=hdfs://DFS_INSTANCE_VOL/accumulo
+23c23
+< instance.zookeeper.host=localhost:2181
+---
+> instance.zookeeper.host=ZOO_INSTANCES
+35a36,38
+> 
+> ## The port used for handling client connections on the tablet servers
+> tserver.port.client=TSERV_PORT_CLIENT

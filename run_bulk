@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script simply launches the bulk_ingest script on the specified node.
+# See the bulk_ingest script for more information.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Only move files and run via pdsh if running on a differnt node than logged into
+if [[ "$BI_NODE" != "$LOCAL_NODE" ]]; then
+  cp inst_dir bulk_ingest acc_test.conf $INSTALL_DIR
+  pdsh -w $BI_NODE 'cp /nfs/software/test/inst_dir .'
+  pdsh -w $BI_NODE 'cp /nfs/software/test/bulk_ingest .'
+  pdsh -w $BI_NODE 'cp /nfs/software/test/acc_test.conf .'
+  pdsh -w $BI_NODE './bulk_ingest'
+  rm $INSTALL_DIR/inst_dir $INSTALL_DIR/bulk_ingest $INSTALL_DIR/acc_test.conf
+  pdsh -w $BI_NODE 'rm inst_dir bulk_ingest acc_test.conf'
+else
+  ./bulk_ingest
+fi

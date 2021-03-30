@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# March 2021 - Gene Weber
+# This script resets directories and file to their state prior to running acc_test_sw_install.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+echo ""
+echo "Restoring files to state prior to acc_test_sw_install run."
+echo ""
+
+# Restore original config files
+cp $HADOOP_HOME/etc/hadoop/orig_core-site.xml $HADOOP_HOME/etc/hadoop/core-site.xml
+cp $HADOOP_HOME/etc/hadoop/orig_hadoop-env.sh $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+cp $HADOOP_HOME/etc/hadoop/orig_hdfs-site.xml $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+cp $HADOOP_HOME/etc/hadoop/orig_mapred-site.xml $HADOOP_HOME/etc/hadoop/mapred-site.xml
+cp $HADOOP_HOME/etc/hadoop/orig_yarn-env.sh $HADOOP_HOME/etc/hadoop/yarn-env.sh
+cp $HADOOP_HOME/etc/hadoop/orig_yarn-site.xml $HADOOP_HOME/etc/hadoop/yarn-site.xml
+cp $ZOOKEEPER_HOME/conf/orig_log4j.properties $ZOOKEEPER_HOME/conf/log4j.properties
+cp $ACCUMULO_HOME/conf/orig_log4j.properties $ACCUMULO_HOME/conf/log4j.properties
+cp $ACCUMULO_HOME/conf/orig_log4j-service.properties $ACCUMULO_HOME/conf/log4j-service.properties
+cp $ACCUMULO_HOME/conf/orig_accumulo.properties $ACCUMULO_HOME/conf/accumulo.properties
+cp $ACCUMULO_HOME/conf/orig_accumulo-env.sh $ACCUMULO_HOME/conf/accumulo-env.sh
+cp $ACCUMULO_HOME/conf/orig_log4j-monitor.properties $ACCUMULO_HOME/conf/log4j-monitor.properties
+cp $ACCUMULO_HOME/conf/orig_accumulo-client.properties $ACCUMULO_HOME/conf/accumulo-client.properties
+cp $ACCUMULO_HOME/bin/orig_accumulo-service $ACCUMULO_HOME/bin/accumulo-service
+cp $ACCUMULO_TESTS_HOME/conf/orig_log4j.properties $ACCUMULO_TESTS_HOME/conf/log4j.properties
+cp $ACCUMULO_TESTS_HOME/conf/orig_accumulo-testing.properties $ACCUMULO_TESTS_HOME/conf/accumulo-testing.properties
+cp $ACCUMULO_TESTS_HOME/conf/orig_env.sh $ACCUMULO_TESTS_HOME/conf/env.sh
+
+
+# Restore .bashrc files.
+pdsh -w ^$INSTALL_DIR/all_nodes 'mv $HOME/.good_bashrc $HOME/.bashrc 2>/dev/null' 2>/dev/null
+
+
+# Delete directories that were created
+pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/tmp 2>/dev/null" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/pids 2>/dev/null" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/data 2>/dev/null" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/hadoop 2>/dev/null" 2>/dev/null
+
+
+# Remove inst_dir file from all nodes.
+pdsh -w ^$INSTALL_DIR/all_nodes "rm inst_dir 2>/dev/null" 2>/dev/null
+
+# Remove environment files from shared installation folder
+rm $INSTALL_DIR/acc_env_vars

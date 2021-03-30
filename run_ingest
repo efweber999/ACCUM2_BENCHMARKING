@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script launches ingest clients on the nodes running tservers.
+# It's recommended to run 1-3 clients per teserver on the node.
+# All settings for this test are in acc_test.conf.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+echo ""
+echo "All options are set in acc_test.conf"
+echo "Current options: $CI_OPTS"
+echo "Number of ingest clients per tserver: $INGEST_CLI_TSERVER"
+echo "Number of ingest clients per node: $INGEST_CLI_NODE"
+echo ""
+
+# Create a new Continuous Ingest table in the accumulo database
+echo ""
+echo "Re-initializing the Ingest table"
+echo ""
+# Check if ci table already exists
+echo -e "tables\nbye\n" | accumulo shell -u root | grep "^ci$" 2>/dev/null >/dev/null
+# Delete it if it does
+if [ "$?" == "0" ]; then
+  echo -e "deletetable ci\nyes\nbye\n" | accumulo shell -u root 2>/dev/null >/dev/null
+fi
+# Create a new empty table
+cingest createtable
+
+# Loop through each tserver node and launch ingest clients on each
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/ingest_clients.pid"
+for node in $ACC_TSERVER_NODES
+do
+  # Remove any old logs
+  pdsh -w $node "rm $LOCAL_NVME1/$ACC_LOG_DIR/ingest_* 2>/dev/null" 2>/dev/null
+  for (( i=1; i<=$INGEST_CLI_NODE; i++ ))
+  do
+    echo "Starting ingest client-${i} on $node"
+    LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.log"
+    ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.err"
+    # CI_OPTS (continuous ingest options) are set in acc_test.conf
+    pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &"
+  done
+  pdsh -w $node "ps -fu $LOGNAME | grep '\ ingest\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+done
+

@@ -1,0 +1,10 @@
+0a1,5
+> server.1=ZOO_NODE1:2888:3888
+> ZOO_USE2server.2=ZOO_NODE2:2888:3888
+> ZOO_USE3server.3=ZOO_NODE3:2888:3888
+> ZOO_USE4server.4=ZOO_NODE4:2888:3888
+> ZOO_USE5server.5=ZOO_NODE5:2888:3888
+12c17
+< dataDir=/tmp/zookeeper
+---
+> dataDir=/LOCAL_NVME1/data/zookeeper

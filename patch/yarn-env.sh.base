@@ -1,0 +1,20 @@
+37c37
+< #export YARN_RESOURCEMANAGER_HEAPSIZE=
+---
+> export YARN_RESOURCEMANAGER_HEAPSIZE=YARN_RM_HEAP
+55a56,58
+> # e) Enable ResourceManager audit logging
+> export YARN_RESOURCEMANAGER_OPTS="-Drm.audit.logger=ERROR,RMAUDIT"
+> #
+68c71
+< #export YARN_NODEMANAGER_HEAPSIZE=
+---
+> export YARN_NODEMANAGER_HEAPSIZE=YARN_NM_HEAP
+73a77,79
+> # a) Enable NodeManager audit logging
+> export YARN_NODEMANAGER_OPTS="-Dnm.audit.logger=ERROR,NMAUDIT"
+> #
+118c124
+< #export YARN_PROXYSERVER_HEAPSIZE=
+---
+> export YARN_PROXYSERVER_HEAPSIZE=YARN_PRX_HEAP

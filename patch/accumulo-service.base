@@ -1,0 +1,8 @@
+126c126
+<   ACCUMULO_LOG_DIR="${ACCUMULO_LOG_DIR:-${basedir}/logs}"
+---
+>   ACCUMULO_LOG_DIR=ACC_LOG_DIR
+136c136
+<   pid_file="${basedir}/run/accumulo-${service}.pid"
+---
+>   pid_file="PIDS_DIR/accumulo-${service}.pid"

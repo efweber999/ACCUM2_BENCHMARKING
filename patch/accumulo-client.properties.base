@@ -1,0 +1,24 @@
+26c26
+< instance.name=
+---
+> instance.name=ACC_DBASE_NAME
+29c29
+< instance.zookeepers=localhost:2181
+---
+> instance.zookeepers=ZOO_INSTANCES
+32c32
+< #instance.zookeepers.timeout=30s
+---
+> #instance.zookeepers.timeout=ZOO_SESSION_TIMEOUT
+41c41
+< auth.principal=
+---
+> auth.principal=ACC_USERNAME
+44c44
+< auth.token=
+---
+> auth.token=ACC_PASSWD
+62c62
+< #batch.writer.timeout.max=0
+---
+> batch.writer.timeout.max=BATCH_WRITE_TIMEOUT

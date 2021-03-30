@@ -1,0 +1,12 @@
+21c21,22
+< export HADOOP_HOME="${HADOOP_HOME:-/path/to/hadoop}"
+---
+> export HADOOP_HOME=HADOOP_HOME_PATH
+> export HADOOP_CONF_DIR="$HADOOP_HOME/etc/hadoop"
+23c24
+< export ACCUMULO_HOME="${ACCUMULO_HOME:-/path/to/accumulo}"
+---
+> export ACCUMULO_HOME=ACCUMULO_HOME_PATH
+43a45,46
+> 
+> CLASSPATH="$CLASSPATH:ACCUMULO_TESTS_HOME_PATH/conf/target/*:ACCUMULO_TESTS_HOME_PATH/conf/target/dependency/*"

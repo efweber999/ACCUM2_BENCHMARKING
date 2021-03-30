@@ -1,0 +1,24 @@
+31c31
+< export ACCUMULO_LOG_DIR="${ACCUMULO_LOG_DIR:-${basedir}/logs}"
+---
+> export ACCUMULO_LOG_DIR=/LOCAL_NVME1/ACC_LOG_DIR
+33c33
+< export HADOOP_HOME="${HADOOP_HOME:-/path/to/hadoop}"
+---
+> export HADOOP_HOME=HADOOP_HOME_PATH
+35c35
+< export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-${HADOOP_HOME}/etc/hadoop}"
+---
+> export HADOOP_CONF_DIR=HADOOP_CONF_DIR_PATH
+37c37
+< export ZOOKEEPER_HOME="${ZOOKEEPER_HOME:-/path/to/zookeeper}"
+---
+> export ZOOKEEPER_HOME=ZOOKEEPER_HOME_PATH
+59c59
+< CLASSPATH="${CLASSPATH}:${lib}/*:${HADOOP_CONF_DIR}:${ZOOKEEPER_HOME}/*:${HADOOP_HOME}/share/hadoop/client/*"
+---
+> CLASSPATH="${CLASSPATH}:${lib}/*:${HADOOP_CONF_DIR}:${ZOOKEEPER_HOME}/lib/zookeeper-3.6.2.jar:${ZOOKEEPER_HOME}/lib/zookeeper-jute-3.6.2.jar:${HADOOP_HOME}/share/hadoop/client/*"
+77c77
+< "${bin}"/accumulo-util build-native &> /dev/null
+---
+> # "${bin}"/accumulo-util build-native &> /dev/null

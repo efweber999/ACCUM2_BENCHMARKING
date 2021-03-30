@@ -1,0 +1,124 @@
+17c17,137
+< <!-- Site specific YARN configuration properties -->
+---
+>   <property>
+>     <name>yarn.nodemanager.aux-services</name>
+>     <value>mapreduce_shuffle</value>
+>     <description>
+>       	A comma separated list of services
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+>     <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+>     <description>
+>       	Can't find shuffle without this
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.resourcemanager.hostname</name>
+>     <value>HADOOP_RESOURCE_NODE</value>
+>     <description>
+>       	The hostname of the RM.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.log-aggregation-enable</name>
+>     <value>true</value>
+>     <description>
+>       	Whether to enable log aggregation.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.nodemanager.remote-app-log-dir</name>
+>     <value>/yarn/tmp/logs</value>
+>     <description>
+>       	Where to aggregate yarn logs to on HDFS.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.app.mapreduce.am.resource.mb</name>
+>     <value>YARN_MR_RES</value>
+>     <description>
+>       	The memory requested for the application master container in MB.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.scheduler.minimum-allocation-mb</name>
+>     <value>YARN_SCH_MIN</value>
+>     <description>
+>       	The resource manager can allocate memory to containers in this increment.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.scheduler.maximum-allocation-mb</name>
+>     <value>YARN_SCH_MAX</value>
+>     <description>
+>       	The maximum memory amount that the resource manager shoul allocate to a container.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.nodemanager.resource.memory-mb</name>
+>     <value>YARN_NM_RES</value>
+>     <description>
+>       	Amount of physical memory, in MB, that can be allocated for containers.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.web-proxy.address</name>
+>     <value>HADOOP_RESOURCE_NODE:9046</value>
+>     <description>
+>       	Location and port where the Hadoop Applcation Manager page can be accessed.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.resourcemanager.nodes.include-path</name>
+>     <value>WORKER_NODES_FILE</value>
+>     <description>
+>       	Full path to file listing all worker nodes.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.nodemanager.resource.detect-hardware-capabilities</name>
+>     <value>false</value>
+>     <description>
+>       	Enable auto-detection of node capabilities such as memory and CPU.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.nodemanager.resource.cpu-vcores</name>
+>     <value>YARN_VCORES_MAX</value>
+>     <description>
+>       	Number of vcores that can be allocated by the RM scheduler when allocating resources for containers.
+>         If set to -1 and yarn.nodemanager.resource.detect-hardware-capabilities is true, automatically
+>         determines from the hardware.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.scheduler.minimum-allocation-vcores</name>
+>     <value>YARN_VCORES_MIN</value>
+>     <description>
+>       	The minimum allocation for every container request at the RM in terms of virtual CPU cores.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>yarn.scheduler.maximum-allocation-vcores</name>
+>     <value>YARN_VCORES_MAX</value>
+>     <description>
+>       	The maximum allocation for every container request at the RM in terms of virtual CPU cores.
+>     </description>
+>   </property>

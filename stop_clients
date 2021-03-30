@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script is called by others and stops clients on the nodes running tservers.
+# The calling script passes in the type of client to stop as $1.
+# All settings for this test are in acc_test.conf.
+
+CLIENT_TYPE=$1
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Loop through each tserver node and kill $CLIENT_TYPE clients on each
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/${CLIENT_TYPE}_clients.pid"
+for node in $ACC_TSERVER_NODES
+do
+  echo "Stopping $CLIENT_TYPE clients on $node"
+  # Using pkill to kill the children of the PIDs
+  pdsh -w $node "cat $PIDFILE | sed 's/^.*$/pkill -P /' > temp1"
+  pdsh -w $node "paste temp1 $PIDFILE >  temp2"
+  pdsh -w $node "source temp2" 2>/dev/null
+  pdsh -w $node "kill \`cat $PIDFILE\` 2>/dev/null" 2>/dev/null
+  pdsh -w $node "rm $PIDFILE temp1 temp2"
+done
+

@@ -1,0 +1,18 @@
+19a20,36
+> 
+>   <property>
+>     <name>fs.defaultFS</name>
+>     <value>hdfs://HADOOP_NAME_NODE:9000/</value>
+>     <description>
+>       The name of the default file system.
+>     </description>
+>   </property>
+> 
+>   <property>
+>     <name>hadoop.tmp.dir</name>
+>     <value>/LOCAL_NVME1/TMP_HADOOP_DIRS</value>
+>     <description>
+>       A base for other temporary Hadoop directories. 
+>     </description>
+>   </property>
+> 

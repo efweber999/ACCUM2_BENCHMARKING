@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script runs a map reduce job that stresses Accumulo by reading and writing the continuous
+# ingest table. This map reduce job will write out an entry for every entry in the table.
+# Stop ingest before running this MapReduce job. Do not run more than one instance of
+# this MapReduce job concurrently against a table.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Remove any files from previous runs.
+echo ""
+echo "Removing any files from previous runs."
+rm /$LOCAL_NVME1/$ACC_LOG_DIR/moru* 2>/dev/null
+
+echo ""
+echo "Stop ingest before running this map reduce job. Do not run more than one instance of"
+echo "this MapReduce job concurrently against a table."
+echo ""
+echo "This runs a map reduce job that stresses Accumulo by reading and writing the continuous"
+echo "ingest table. This MapReduce job will write out an entry for every entry in the table"
+echo "(except for ones created by the MapReduce job itself)."
+echo ""
+
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/moru.pid"
+LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/moru.log"
+ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/moru.err"
+# Delete any files from previous runs.
+rm $PIDFILE $LOGFILE $ERRFILE 2>/dev/null
+# run map reduce job to stress test continuous ingest table
+nohup cingest moru >$LOGFILE 2>$ERRFILE < /dev/null &
+PID=$!
+echo $PID > $PIDFILE
+echo "Running moru, PID=${PID}"

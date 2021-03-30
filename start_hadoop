@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# March 2021 - Gene Weber
+# This script launches Zookeeper and Hadoop.
+# The acc_test_sw_install script must be run first.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+echo ""
+echo "Starting Zookeeper"
+echo ""
+
+# Start Zookeeper
+ZOOKEEPER_NODES=`cat $INSTALL_DIR/zoo_nodes`
+i=1
+for node in $ZOOKEEPER_NODES
+do
+  pdsh -w $node "echo '$i' > /$LOCAL_NVME1/data/zookeeper/myid"
+  ((i=i+1))
+done
+pdsh -w ^$INSTALL_DIR/zoo_nodes "zkServer.sh start $INSTALL_DIR/zookeeper-3.6.2/conf/zookeeper.cfg"
+
+echo ""
+echo "Starting HDFS"
+echo ""
+
+# Format HDFS file system
+pdsh -w ^$INSTALL_DIR/had_nam_node "hdfs namenode -format"
+# Start HDFS name node
+pdsh -w ^$INSTALL_DIR/had_nam_node "hdfs --daemon start --config $INSTALL_DIR/hadoop-3.1.2/etc/hadoop namenode"
+# Start HDFS data nodes
+pdsh -w ^$INSTALL_DIR/had_wkr_nodes "hdfs --daemon start --config $INSTALL_DIR/hadoop-3.1.2/etc/hadoop datanode"
+
+echo ""
+echo "SHUTDOWN_MSG: Shutting down NameNode is normal and expected."
+echo ""
+
+echo ""
+echo "Starting Yarn"
+echo ""
+
+# Start Yarn resource manager
+pdsh -w ^$INSTALL_DIR/had_rsc_node "yarn --daemon start --config $INSTALL_DIR/hadoop-3.1.2/etc/hadoop resourcemanager"
+# Start Yarn node managers
+pdsh -w ^$INSTALL_DIR/had_wkr_nodes "yarn --daemon start --config $INSTALL_DIR/hadoop-3.1.2/etc/hadoop nodemanager"
+
+# Start Hadoop Proxy Server
+pdsh -w ^$INSTALL_DIR/had_rsc_node "yarn --daemon start --config $INSTALL_DIR/hadoop-3.1.2/etc/hadoop proxyserver"
+
+if [ "$AWS" = true ]; then
+  PROXY=`cat $INSTALL_DIR/had_rsc_node | sed 's/^/ip-/' | sed 's/\./-/g' | sed 's/$/\.evoforge\.org/'`
+else
+  PROXY=`cat $INSTALL_DIR/had_rsc_node`
+fi
+echo ""
+echo "You can view HADOOP Application Manager at:"
+echo "http://$PROXY:8088/cluster"
+echo ""
+
+echo "Hadoop Filesystem Information:"
+hdfs dfs -df -h /
+echo ""
+
+echo ""
+echo "If this looked successful you can now run the run_pi, and run_terasort test scripts. You can also"
+echo "launch the start_accumulo script. The stop_hadoop script will terminate hadoop processes and clean up."
+echo "NOTE: To run Hadoop commands from the command line you must first: source $INSTALL_DIR/acc_env_vars"
+echo ""

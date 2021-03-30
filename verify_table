@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Gene Weber - March 2021
+# This script verifies the continuous ingest table via a map reduce job.
+# All settings for this test are in acc_test.conf.
+
+# Location of existing directory on shared file system of installed software.
+INSTALL_DIR=`cat inst_dir`
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Setup log files
+LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/verify.log"
+ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/verify.err"
+
+# Remove any files from previous runs.
+echo ""
+echo "Removing any files from previous runs."
+hdfs dfs -rm -r -f /tmp/ci-verify 2>/dev/null
+rm $LOGFILE $ERRFILE* 2>/dev/null
+
+echo ""
+echo "Running a MapReduce job that verifies the contents of the ci table. Output is"
+echo "written to $ERRFILE and $LOGFILE"
+echo ""
+
+# run map reduce job to generate data for bulk import
+cingest verify >$LOGFILE 2>$ERRFILE
