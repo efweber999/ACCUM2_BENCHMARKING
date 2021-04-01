@@ -1,0 +1,16 @@
+40c40
+< instance.name=myinstance
+---
+> instance.name=ACC_DBASE_NAME
+43c43
+< instance.zookeepers=localhost:2181
+---
+> instance.zookeepers=ZOO_INSTANCES
+55c55
+< auth.principal=root
+---
+> auth.principal=ACC_USERNAME
+58c58
+< auth.token=secret
+---
+> auth.token=ACC_PASSWD

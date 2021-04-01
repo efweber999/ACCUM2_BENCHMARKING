@@ -11,6 +11,17 @@ source acc_test.conf
 source $INSTALL_DIR/acc_env_vars
 
 echo ""
+echo "Stopping the Accumulo Proxy"
+echo ""
+
+# Stop the accumulo Proxy
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/acc_proxy.pid"
+# Using pkill to kill the children of the PID
+pdsh -w ^$INSTALL_DIR/acc_proxy_node "pkill -P \`cat $PIDFILE\`"
+pdsh -w ^$INSTALL_DIR/acc_proxy_node "kill \`cat $PIDFILE\`" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acc_proxy_node "rm $PIDFILE"
+
+echo ""
 echo "Stopping the Accumulo Tracer"
 echo ""
 

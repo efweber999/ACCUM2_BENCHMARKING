@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# March 2021 - Gene Weber
+# April 2021 - Gene Weber
 # This script launches Accumulo after running the installation script, and start_hadoop script.
 
 # Location of existing directory on shared file system of installed software.
@@ -64,14 +64,30 @@ echo ""
 echo "Starting the Accumulo Tracer"
 echo ""
 
+# Start the accumulo tracer
+pdsh -w ^$INSTALL_DIR/acctracernodes 'accumulo-service tracer start'
+
+# If Accumulo Proxy is installed, start it.
+if [ $INSTALL_PROXY = true ]; then
+
+  echo ""
+  echo "Starting the Accumulo Proxy"
+  echo ""
+
+  LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/acc_proxy.log"
+  ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/acc_proxy.err"
+  PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/acc_proxy.pid"
+  pdsh -w ^$INSTALL_DIR/acc_proxy_node "nohup accumulo-proxy -p $ACC_PROXY_HOME/conf/proxy.properties \
+                                        >$LOGFILE 2>$ERRFILE < /dev/null &"
+  pdsh -w ^$INSTALL_DIR/acc_proxy_node "ps -fu $LOGNAME | grep '.*bin\/accumulo-proxy ' | sed 's/^$LOGNAME *//' |\
+                                        sed 's/\ .*$//' >$PIDFILE"
+fi
+
 # Run a command in the accumulo shell as a simple test.
 cat <<EOT | accumulo shell -u root
 tables
 bye
 EOT
-
-# Start the accumulo tracer
-pdsh -w ^$INSTALL_DIR/acctracernodes 'accumulo-service tracer start'
 
 if [ "$AWS" = true ]; then
   PROXY=`cat $INSTALL_DIR/accmonitornodes | sed 's/^/ip-/' | sed 's/\./-/g' | sed 's/$/\.evoforge\.org/'`

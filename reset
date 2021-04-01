@@ -32,6 +32,7 @@ cp $ACCUMULO_HOME/bin/orig_accumulo-service $ACCUMULO_HOME/bin/accumulo-service
 cp $ACCUMULO_TESTS_HOME/conf/orig_log4j.properties $ACCUMULO_TESTS_HOME/conf/log4j.properties
 cp $ACCUMULO_TESTS_HOME/conf/orig_accumulo-testing.properties $ACCUMULO_TESTS_HOME/conf/accumulo-testing.properties
 cp $ACCUMULO_TESTS_HOME/conf/orig_env.sh $ACCUMULO_TESTS_HOME/conf/env.sh
+cp -n $ACC_PROXY_HOME/conf/orig_proxy.properties $ACC_PROXY_HOME/conf/proxy.properties
 
 
 # Restore .bashrc files.
