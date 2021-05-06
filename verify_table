@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021 - Gene Weber
 # This script verifies the continuous ingest table via a map reduce job.
 # All settings for this test are in acc_test.conf.
 
@@ -18,13 +18,23 @@ ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/verify.err"
 # Remove any files from previous runs.
 echo ""
 echo "Removing any files from previous runs."
-hdfs dfs -rm -r -f /tmp/ci-verify 2>/dev/null
+hdfs dfs -rm -skipTrash -r -f /tmp/ci-verify 2>/dev/null
 rm $LOGFILE $ERRFILE* 2>/dev/null
 
 echo ""
-echo "Running a MapReduce job that verifies the contents of the ci table. Output is"
-echo "written to $ERRFILE and $LOGFILE"
+echo "Running a MapReduce job that verifies the contents of the ci table."
+echo "Output is written to $ERRFILE and $LOGFILE"
+echo "on node $VER_NODE"
+echo "This can take some time."
+date
 echo ""
 
 # run map reduce job to generate data for bulk import
 cingest verify >$LOGFILE 2>$ERRFILE
+
+if grep "completed successfully" $ERRFILE >/dev/null; then
+  echo "CI table verification passed."
+else
+  echo "CI table verification failed. Review log files."
+fi
+date

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# April 2021 - Gene Weber
+# May 2021 - Gene Weber
 # This script installs all software necessary to run an Accumulo 2.0.1 baseline test.
 # This includes: Maven 3.6.3, Zookeeper 3.6.2, hadoop 3.1.2, accumulo 2.0.1, and accumulo-testing 2.0
 # It optionally installs Accumulo Proxy 2.0.0
@@ -16,7 +16,8 @@
 # 5. These scripts require patch.
 # 6. These scripts require that nodes have access to both a shared file system and at least one local drive.
 # 7. These scripts require that the user have read, write, and execute permission on local drives.
-# 8. These scripts assume CentOS 7.
+# 8. These scripts require that the user can passwordless scp between nodes.
+# 9. These scripts assume CentOS 7.
 
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 # >>> Run some checks and tests before starting actual installation
@@ -441,6 +442,7 @@ done
 cat patch/acc_log4j.properties.base > patch/acc_log4j.properties.patch
 cat patch/acc_log4j-service.properties.base > patch/acc_log4j-service.properties.patch
 cat patch/acc_log4j-monitor.properties.base > patch/acc_log4j-monitor.properties.patch
+cat patch/accumulo.properties.pre-split.base > patch/accumulo.properties.pre-split.patch
 cat patch/accumulo-client.properties.base |\
  sed "s/ACC_DBASE_NAME/$ACC_DBASE_NAME/" |\
  sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
@@ -469,7 +471,12 @@ cat patch/accumulo-service.base |\
 # Patch Accumulo configuration files.
 patch $ACCUMULO_HOME/conf/log4j.properties patch/acc_log4j.properties.patch
 patch $ACCUMULO_HOME/conf/log4j-service.properties patch/acc_log4j-service.properties.patch
+# For accumulo.properties, make versions for pre-split and not pre-split table tests.
 patch $ACCUMULO_HOME/conf/accumulo.properties patch/accumulo.properties.patch
+cp $ACCUMULO_HOME/conf/accumulo.properties $ACCUMULO_HOME/conf/accumulo.properties.no-split
+patch $ACCUMULO_HOME/conf/accumulo.properties patch/accumulo.properties.pre-split.patch
+cp $ACCUMULO_HOME/conf/accumulo.properties $ACCUMULO_HOME/conf/accumulo.properties.pre-split
+cp $ACCUMULO_HOME/conf/accumulo.properties.no-split $ACCUMULO_HOME/conf/accumulo.properties
 patch $ACCUMULO_HOME/conf/accumulo-env.sh patch/accumulo-env.sh.patch
 patch $ACCUMULO_HOME/conf/log4j-monitor.properties patch/acc_log4j-monitor.properties.patch
 patch $ACCUMULO_HOME/conf/accumulo-client.properties patch/accumulo-client.properties.patch
@@ -547,6 +554,9 @@ if [ $INSTALL_TESTS = true ]; then
   echo ""
  $ACCUMULO_TESTS_HOME/bin/build
 fi
+
+# Compile create_splits program
+cc -o create_splits create_splits.c
 
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 # >>> Start Accumulo Proxy Installation and Configuration

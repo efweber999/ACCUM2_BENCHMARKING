@@ -1,0 +1,220 @@
+#!/bin/bash
+
+# May 2021 - Gene Weber
+# This script runs an ingest test until the specified percentage of HDFS file system is filled.
+# It calls the run_ingest and stop ingest scripts.
+#
+# Accumulo rfile-info is used to get the number of entries in each rfile which comprise the table.
+# The number of entries in each of these rfiles is summed and divided by the number of seconds the
+# test ran. Tried using tserver ingest data from the metrics2 file, but it proved very inaccurate.
+#
+# COMMAND LINE OPTIONS: If this script is launched with the command line option "split"
+# it will pre-split the ci table using the "splits" file which must exist!!
+#
+# All settings for this test are in acc_test.conf.
+
+# Save command line option
+COMMAND_OPTION=$1
+
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Calculate the fill value to reach during the continuous ingest test
+echo ""
+echo "Checking size of Hadoop file system."
+HDFS_STOR_SIZE=`hdfs dfs -df  / | tail -1 | awk '{print $2}'`
+CI_FILL_BYTES=`awk "BEGIN {x=$HDFS_STOR_SIZE*$CI_FILL_PERCENT; print int(x)}"`
+
+# Start the Continuous Ingest test.
+echo ""
+echo "Starting Continuous Ingest clients."
+if [ "$COMMAND_OPTION" == "split" ]; then
+  echo "Running ingest with pre-split ci table. Was the accumulo.properties.pre-split configuration file used?"
+  echo ""
+  ./run_ingest split
+  SPLIT_CHOICE="was"
+  NUM_SPLITS=`wc -l splits | awk '{sum=$1+1};END{print sum}'`
+else
+  ./run_ingest
+  SPLIT_CHOICE="was not"
+  NUM_SPLITS=0
+fi
+
+# Initialize loop and run until the specified amount of HDFS storage has been consumed.
+CUR_STORE_USED=`hdfs dfs -df | tail -1 | awk '{print $3}'`
+hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > hdfs_temp
+NUM_RFILES=`cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
+NUM_TABLETS=`cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+echo ""
+echo "Continuous Ingest has filled $CUR_STORE_USED towards $CI_FILL_BYTES. CI Tablets = $NUM_TABLETS, CI Rfiles = $NUM_RFILES"
+while [ $CUR_STORE_USED -le $CI_FILL_BYTES ]
+do
+  sleep 5m
+  CUR_STORE_USED=`hdfs dfs -df | tail -1 | awk '{print $3}'`
+  hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > hdfs_temp
+  NUM_RFILES=`cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
+  NUM_TABLETS=`cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+  echo "Continuous Ingest has filled $CUR_STORE_USED towards $CI_FILL_BYTES. CI Tablets = $NUM_TABLETS, CI Rfiles = $NUM_RFILES"
+done
+rm hdfs_temp
+
+# Get the ingest test start time.
+START_TIME=`cat ingest_start`
+rm ingest_start 2>/dev/null
+
+# Stop the Continuous Ingest test.
+echo ""
+echo "Stopping Continuous Ingest clients."
+./stop_ingest
+
+# Get the ingest test end time.
+END_TIME=`cat client_stop`
+rm client_stop 2>/dev/null
+
+# Calculate duration of test
+TT_SECS=$(( $END_TIME - $START_TIME ))
+DURATION=`eval "echo $(date -ud "@$TT_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+
+# Get post processing start time.
+PP_ST=`date +%s`
+
+# Take the ci table offline so the rfiles are stable during results processing.
+echo ""
+echo "Taking ci table offline. Waiting 5 seconds for that to complete."
+echo ""
+echo -e "flush -t ci -w\noffline -t ci -w\nsleep 5\nbye\n" | accumulo shell -u root
+
+# Get the total number of nodes available for post processing.
+NUM_NODES=`cat $INSTALL_DIR/all_nodes | wc -l`
+
+# Store the list of all nodes in TEMP, replacing all newlines
+# with spaces (the default field seperator)
+TEMP=`tr '\012' ' ' < $INSTALL_DIR/all_nodes`
+NODE_LIST=($TEMP) # split to array $NODE_LIST
+
+# Generate a full HDFS path list of all rfiles associated with the ci table.
+echo ""; echo "Getting a list of all ci rfiles."
+RFILES=`hdfs dfs -ls -R /accumulo | grep ".*\/t-.*\.rf$" | awk '{print $8}'`
+
+# Create a run file for each of the nodes to execute. 1st line removes old value file.
+echo ""; echo "Creating processing run files."
+for ((i=0; i<NUM_NODES; i++ ))
+do
+  echo "rm /$LOCAL_NVME1/rfile_vals_$i 2>/dev/null" > /$LOCAL_NVME1/rfile_gen_$i
+done
+# Distribute processing of rfiles into run files. One run file for each node.
+NUM_FILES=0; i=0
+for rfile in $RFILES
+do
+  ((NUM_FILES++))
+  # Format the number of entries listed in the output of each rfile-info run to remove commas.
+  echo "accumulo rfile-info $rfile | grep -i 'num entries' | awk '{print \$4}' | sed 's/,//g' \
+        >> /$LOCAL_NVME1/rfile_vals_$i" >> /$LOCAL_NVME1/rfile_gen_$i
+  ((i++))
+  if (( $i >= $NUM_NODES )); then # If launched on last node in list, wrap back to start of list.
+    if (( $NUM_FILES == $i )); then
+      # All files now exist, so make them executable as a background process.
+      chmod 755 /$LOCAL_NVME1/rfile_gen_* &
+    fi
+    i=0
+  fi
+done
+# Add a line that copies values back to the local drive of this node.
+for ((i=0; i<NUM_NODES; i++ ))
+do
+  echo "scp /$LOCAL_NVME1/rfile_vals_$i $LOCAL_NODE:/$LOCAL_NVME1" >> /$LOCAL_NVME1/rfile_gen_$i
+done
+echo "There are $NUM_FILES CI table rfiles."
+
+# Copy each run file to the appropriate node.
+echo ""; echo "Copying processing files to local directories on each appropriate node."
+for ((i=0; i<NUM_NODES; i++ ))
+do
+  scp /$LOCAL_NVME1/rfile_gen_$i ${NODE_LIST[$i]}:/$LOCAL_NVME1/rfile_gen
+done
+
+# Launch processing run files on all nodes.
+echo ""; echo "Launching rfile processing on all nodes."
+rm /$LOCAL_NVME1/rfile_vals_* 2>/dev/null &
+pdsh -w ^$INSTALL_DIR/all_nodes "/$LOCAL_NVME1/rfile_gen" &
+
+# Wait for all processing to be finished. Count backwards for margin as 0 is procesed on local node.
+echo ""; echo "Waiting for all nodes to finish processing their rfiles. This could take a while."
+for ((i=${NUM_NODES}-1; i>=0; i-- ))
+do
+  while [ ! -f /$LOCAL_NVME1/rfile_vals_$i ]
+  do
+    sleep 1
+  done
+done
+echo "Processing complete."
+echo ""
+
+# Get the post processing end time.
+PP_ET=`date +%s`
+
+# Calculate duration of post processing
+PP_SECS=$(( $PP_ET - $PP_ST ))
+PP_DUR=`eval "echo $(date -ud "@$PP_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+
+# Bring the ci table back online so it is available for walk tests.
+echo ""
+echo "Bringing the ci table back online."
+echo ""
+echo -e "online -t ci -w\nbye\n" | accumulo shell -u root
+
+# Sum the number of entries that were listed in every rfile.
+TABLE_ENTRIES=`cat /$LOCAL_NVME1/rfile_vals* | awk '{sum+=$1};END{print sum}'`
+FINAL_ENTRIES=`LC_NUMERIC=en_US printf "%'.d" $TABLE_ENTRIES` # Format for printing
+
+# Calculate the total number of tservers.
+TEMP=`awk "BEGIN {x=($NUM_TSERVER_NODES * $TABS_PER_NODE); printf(\"%.0f\", x)}"`
+# Format the number with thousands separator for readability.
+TOT_TSERVERS=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+
+# Calculate records ingested per second.
+TEMP=`awk "BEGIN {x=($TABLE_ENTRIES/$TT_SECS); printf(\"%.0f\", x)}"`
+# Format the number with thousands separator for readability.
+INGEST_RATE=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+
+# Create log file name
+LOG_NAME="ingest_only_`date +%Y-%m-%d-%H:%M`.log"
+touch $LOG_NAME
+
+# Calculate percentage of Hadoop file system used.
+HDFS_PERCENT=`awk "BEGIN {x=($CUR_STORE_USED/$HDFS_STOR_SIZE)*100; printf(\"%.2f\", x)}"`
+# Format numbers with thousands separator.
+STOR_SUBSYS=`LC_NUMERIC=en_US printf "%'.d" $HDFS_STOR_SIZE`
+STOR_USED=`LC_NUMERIC=en_US printf "%'.d" $CUR_STORE_USED`
+
+# Calculate number of tablets created.
+# The assumption here is that all rfiles in a t-xxxxxxx directory comprise one tablet. I.E. each tablet has
+# its own t-xxxxxxx directory, so count those.
+NUM_TABLETS=`hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" | grep "^d" | wc -l`
+
+# Print output
+printf  "\n \
+`uname -a` \
+\n\n \
+This test took: $DURATION\n \
+Post processing of the results took: $PP_DUR\n \
+${HDFS_PERCENT}%% of the HDFS file system was used.\n \
+$STOR_USED bytes were used out of $STOR_SUBSYS bytes available.\n \
+\n \
+$NUM_TSERVER_NODES nodes ran tservers.\n \
+Each of these nodes ran $TABS_PER_NODE tablet servers, for a total of $TOT_TSERVERS tservers.\n \
+\n \
+The CI table contains $FINAL_ENTRIES entries\n \
+The CI table consisted of $NUM_TABLETS tablets, and $NUM_FILES Rfiles by the end of this test.\n \
+The CI table $SPLIT_CHOICE pre-split. There were $NUM_SPLITS pre-splits.\n \
+\n \
+The ingest rate for this cluster is: $INGEST_RATE entries per second.\n \
+\n" | tee $LOG_NAME
+
+# Clean up 
+pdsh -w ^$INSTALL_DIR/all_nodes "rm /$LOCAL_NVME1/rfile_* 2>/dev/null" & 2>/dev/null
+
+echo "Please run ./run_verify to check the integrity of the CI table."
+echo ""

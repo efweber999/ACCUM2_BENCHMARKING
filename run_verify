@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# Gene Weber - May 2021
 # This script simply launches the verify table test script on the specified node.
 # See the verify table test script for more information.
 
@@ -11,7 +11,7 @@ source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
 
-# Only move files and run via pdsh if running on a differnt node than logged into
+# Only move files and run via pdsh if running on a different node than logged into
 if [[ "$VER_NODE" != "$LOCAL_NODE" ]]; then
   cp inst_dir verify_table acc_test.conf $INSTALL_DIR
   pdsh -w $VER_NODE 'cp /nfs/software/test/inst_dir .'

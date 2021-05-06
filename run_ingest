@@ -1,9 +1,16 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# Gene Weber - April 2021
 # This script launches ingest clients on the nodes running tservers.
 # It's recommended to run 1-3 clients per teserver on the node.
+#
+# COMMAND LINE OPTIONS: If this script is launched with the command line option "split"
+# it will pre-split the ci table using the "splits" file which must exist!!
+#
 # All settings for this test are in acc_test.conf.
+
+# Save command line option
+COMMAND_OPTION=$1
 
 # Location of existing directory on shared file system of installed software.
 INSTALL_DIR=`cat inst_dir`
@@ -29,23 +36,44 @@ echo -e "tables\nbye\n" | accumulo shell -u root | grep "^ci$" 2>/dev/null >/dev
 if [ "$?" == "0" ]; then
   echo -e "deletetable ci\nyes\nbye\n" | accumulo shell -u root 2>/dev/null >/dev/null
 fi
-# Create a new empty table
-cingest createtable
+# Create a new empty table. Pre-split the table if the split option was specified.
+# cingest createtable
+# if [ "$COMMAND_OPTION" == "split" ]; then
+#   echo -e "addsplits -sf splits -t ci\n" | accumulo shell -u root 2>/dev/null >/dev/null
+# fi
+if [ "$COMMAND_OPTION" == "split" ]; then
+  echo -e "createtable ci -sf splits\n" | accumulo shell -u root
+else
+  cingest createtable
+fi
 
-# Loop through each tserver node and launch ingest clients on each
-PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/ingest_clients.pid"
+# Loop through each tserver node and emove any old logs
 for node in $ACC_TSERVER_NODES
 do
-  # Remove any old logs
-  pdsh -w $node "rm $LOCAL_NVME1/$ACC_LOG_DIR/ingest_* 2>/dev/null" 2>/dev/null
+  pdsh -w $node "rm $LOCAL_NVME1/$ACC_LOG_DIR/ingest_* 2>/dev/null" 2>/dev/null &
+done
+
+# Loop through each tserver node and launch ingest clients on each
+for node in $ACC_TSERVER_NODES
+do
   for (( i=1; i<=$INGEST_CLI_NODE; i++ ))
   do
     echo "Starting ingest client-${i} on $node"
     LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.log"
     ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.err"
     # CI_OPTS (continuous ingest options) are set in acc_test.conf
-    pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &"
+    pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &" &
   done
-  pdsh -w $node "ps -fu $LOGNAME | grep '\ ingest\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+done
+echo `date +%s` > ingest_start #Capture start time.
+
+# Loop through each tserver node and write the associated pids to the PID file.
+PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/ingest_clients.pid"
+echo ""
+echo "Collecting and saving pid information."
+sleep 5 # Make sure clients hace a chance to start.
+for node in $ACC_TSERVER_NODES
+do
+  pdsh -w $node "ps -fu $LOGNAME | grep '\ ingest\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE" &
 done
 

@@ -1,0 +1,13 @@
+38a39,50
+> 
+> ## Set this ratio arbitrarily high so that major compactions (combining of Rfiles) do not
+> ## take place during the test.
+> table.compaction.major.ratio=9999999
+> 
+> ## Set this property arbitrarily high so that merging minor compactions (merging the tablet’s
+> ## smallest Rfile with the data in memory at minor compaction time) do not take place during the test.
+> table.file.max=9999999
+> 
+> ## Set this property arbitrarily large to defeat the splitting of tablets during the test.
+> ## The table will be pre-split before running the test.
+> table.split.threshold=999G

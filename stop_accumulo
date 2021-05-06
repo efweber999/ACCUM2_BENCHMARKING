@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# March 2021 - Gene Weber
-# This script stop Accumulo, and cleans up.
+# May 2021 - Gene Weber
+# This script stops Accumulo, and cleans up.
+#
 
 # Location of existing directory on shared file system of installed software.
 INSTALL_DIR=`cat inst_dir`
@@ -62,11 +63,20 @@ echo ""
 # Stop the accumulo monitor
 pdsh -w ^$INSTALL_DIR/accmonitornodes 'accumulo-service monitor stop'
 
+# Clean up Accumulo database.
+echo ""
+echo "Clearing old data from Zookeeper."
+echo ""
+
+# Run ZooZap to remove old artifacts from Zookeeper.
+pdsh -w ^$INSTALL_DIR/zoo_nodes 'accumulo org.apache.accumulo.server.util.ZooZap -verbose -master -tservers -tracers'
+
 echo ""
 echo "Deleting the  Accumulo database"
 echo ""
 
-hdfs dfs -rm -r /accumulo
+hdfs dfs -rm -skipTrash -r /accumulo
+hdfs dfsadmin -report >/dev/null # This seems to force reclaimation of HDFS disk space.
 
 echo ""
 echo "If this looked successful, it's now safe to stop hadoop."

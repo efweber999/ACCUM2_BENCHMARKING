@@ -1,0 +1,156 @@
+#!/bin/bash
+
+# May 2021 - Gene Weber
+# This script runs the run_walk test for the time period specified in acc_test.conf.
+# It calls the run_walk and stop_walk scripts.
+#
+# COMMAND LINE OPTIONS: If this script is launched with the command line option "batch"
+# it will run batch walk instead of walk.
+#
+# All settings for this test are in acc_test.conf.
+
+# Save command line option
+COMMAND_OPTION=$1
+
+# Execute the configuration file to initialize all needed variables.
+source acc_test.conf
+# Get all needed environmental variables.
+source $INSTALL_DIR/acc_env_vars
+
+# Verify that a Continuous Ingest table exists.
+echo ""
+echo "Checking that a CI table exists."
+echo ""
+# Check if ci table exists
+echo -e "tables\nbye\n" | accumulo shell -u root | grep "^ci$" 2>/dev/null >/dev/null
+# If it doesn't. abort test.
+if [ "$?" != "0" ]; then
+  echo "No CI table found. Please execute ./run_ingest to create a table."
+  echo ""
+  exit
+fi
+
+# Execute walk test.
+if [ "$COMMAND_OPTION" == "batch" ]; then
+  echo "Launching batch walk test."
+  BATCH_INFO="Scan batch size is $SCAN_BATCH_SIZE.\n"
+  ./run_batchwalk
+else
+  echo "Launching walk test."
+  BATCH_INFO=""
+  ./run_walk
+fi
+
+# Allow test to run for duration set in acc_test.conf
+echo ""
+date
+echo "Test will run for approximately $TEST_WALK_DURATION"
+echo ""
+sleep $TEST_WALK_DURATION
+
+# Stop the test
+if [ "$COMMAND_OPTION" == "batch" ]; then
+  echo "Stopping the batch walk test."
+  echo ""
+  ./stop_batchwalk
+  LOGFILE="/$LOCAL_NVME1/data/accumulo/logs/batchwalk_*.log"
+  LOG_NAME="batchwalk_`date +%Y-%m-%d-%H:%M`.log"
+else
+  echo "Stopping the walk test."
+  echo ""
+  ./stop_walk
+  LOGFILE="/$LOCAL_NVME1/data/accumulo/logs/walk_*.log"
+  LOG_NAME="walk_`date +%Y-%m-%d-%H:%M`.log"
+fi
+
+echo ""
+echo "Processing the test results."
+echo ""
+
+# Make an empty walk_fsr file
+> /$LOCAL_NVME1/walk_fsr 2>/dev/null
+
+# Get the total number of teserver nodes.
+NUM_NODES=`cat $INSTALL_DIR/acctservernodes | wc -l`
+
+# Store the list of all nodes in TEMP, replacing all newlines
+# with spaces (the default field seperator)
+TEMP=`tr '\012' ' ' < $INSTALL_DIR/acctservernodes`
+NODE_LIST=($TEMP) # split to array $NODE_LIST
+
+# Copy all of the log files to the local drive of this node.
+echo ""; echo "Copying all walk logs to this node's local drive."
+for ((i=0; i<NUM_NODES; i++ ))
+do
+  scp ${NODE_LIST[$i]}:$LOGFILE /$LOCAL_NVME1
+done
+
+# Combine all logs into one file.
+if [ "$COMMAND_OPTION" == "batch" ]; then
+  cat /$LOCAL_NVME1/batchwalk_*.log | grep "FSB" | sed 's/^.*INFO : //' >> /$LOCAL_NVME1/walk_fsr
+else
+  cat /$LOCAL_NVME1/walk_*.log | grep "FSR" | sed 's/^.*INFO : //' >> /$LOCAL_NVME1/walk_fsr
+fi
+
+# Number of scans
+FSR_LINES=`cat /$LOCAL_NVME1/walk_fsr | wc -l`
+
+# Get the total number entries read.
+# The last field is the count of valid entries the scan traversed. Add 2 to this number,
+# one for the Found Start Row (FSR), and one for end of list found (SQR event). 
+if [ "$COMMAND_OPTION" == "batch" ]; then
+  ENTRIES_READ=`cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($4+2) } END { print int(sum) }'`
+else
+  ENTRIES_READ=`cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($5+2) } END { print int(sum) }'`
+fi
+echo "TOT_MS: $TOT_MS"
+
+# Get the earliest and latest timestamps.
+FIRST_LAST=`cat /$LOCAL_NVME1/walk_fsr | awk '{print $2}' | sort | sed -e 1b -e '$!d'`
+FIRST=`echo $FIRST_LAST | awk '{print $1}'`
+LAST=`echo $FIRST_LAST | awk '{print $2}'`
+
+# Calculate the test duration in seconds from timestamps in ms.
+TS_SECS=`awk "BEGIN{x=(($LAST-$FIRST)/1000); printf(\"%.0f\", x)}"`
+
+# Calculate the read rate.
+READ_RATE=`awk "BEGIN{x=($ENTRIES_READ/$TS_SECS); printf(\"%.1f\", x)}"`
+
+# Calculate the total number of walk clients.
+TEMP=`awk "BEGIN {x=($NUM_TSERVER_NODES * $WALK_CLI_NODE); printf(\"%.0f\", x)}"`
+# Format the number with thousands separator for readability.
+TOT_CLIENTS=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+
+# Calculate duration of test
+DURATION=`eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+
+# Create log file name
+touch $LOG_NAME
+
+# Calculate number of tablets and rfiles.
+hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > /$LOCAL_NVME1/hdfs_temp
+NUM_RFILES=`cat /$LOCAL_NVME1/hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
+NUM_TABLETS=`cat /$LOCAL_NVME1/hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+
+# Print output
+printf  "\n \
+`uname -a` \
+\n\n \
+This test took: $DURATION\n \
+$FSR_LINES scans were recorded.\n \
+$ENTRIES_READ entries were read.\n \
+The sleep time between scans was set to $DEL_BTWN_WALKS ms\n \
+$BATCH_INFO \
+\n \
+$NUM_TSERVER_NODES nodes ran walk clients\n \
+Each of these nodes ran $WALK_CLI_NODE walk clients, for a total of $TOT_CLIENTS clients\n \
+\n \
+The CI table consisted of $NUM_TABLETS tablets, and $NUM_RFILES Rfiles.\n \
+\n \
+The read rate for this cluster is: $READ_RATE entries per second.\n \
+\n" | tee $LOG_NAME
+
+# Clean up 
+rm /$LOCAL_NVME1/walk_fsr 2>/dev/null
+rm /$LOCAL_NVME1/hdfs_temp 2>/dev/null
+rm /$LOCAL_NVME1/*walk_*.log 2>/dev/null

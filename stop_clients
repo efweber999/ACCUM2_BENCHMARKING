@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# Gene Weber - April 2021
 # This script is called by others and stops clients on the nodes running tservers.
 # The calling script passes in the type of client to stop as $1.
+# Used 3 loops instaed of 1 to improve accurace of test timing.
 # All settings for this test are in acc_test.conf.
 
 CLIENT_TYPE=$1
@@ -14,16 +15,28 @@ source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
 
-# Loop through each tserver node and kill $CLIENT_TYPE clients on each
+# Loop through each tserver node and create the file to kill processes.
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/${CLIENT_TYPE}_clients.pid"
+echo "Preparing to stop clients."
 for node in $ACC_TSERVER_NODES
 do
-  echo "Stopping $CLIENT_TYPE clients on $node"
   # Using pkill to kill the children of the PIDs
   pdsh -w $node "cat $PIDFILE | sed 's/^.*$/pkill -P /' > temp1"
   pdsh -w $node "paste temp1 $PIDFILE >  temp2"
-  pdsh -w $node "source temp2" 2>/dev/null
-  pdsh -w $node "kill \`cat $PIDFILE\` 2>/dev/null" 2>/dev/null
-  pdsh -w $node "rm $PIDFILE temp1 temp2"
+done
+
+# Loop through each tserver node and kill $CLIENT_TYPE clients on each
+echo `date +%s` > client_stop
+for node in $ACC_TSERVER_NODES
+do
+  echo "Stopping $CLIENT_TYPE clients on $node"
+  pdsh -w $node "source temp2" 2>/dev/null # Don't background. Causes race with next line.
+  pdsh -w $node "kill \`cat $PIDFILE\` 2>/dev/null" 2>/dev/null &
+done
+
+# Loop through each tserver node delete files
+for node in $ACC_TSERVER_NODES
+do
+  pdsh -w $node "rm $PIDFILE temp1 temp2" &
 done
 

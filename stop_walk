@@ -6,3 +6,4 @@
 
 # Call generic stop clients script specifying walk.
 ./stop_clients walk
+rm client_stop 2>/dev/null

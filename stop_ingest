@@ -4,3 +4,4 @@
 # This script calls the generic stop clients script with the ingest client type.
 
 ./stop_clients ingest
+rm ingest_start 2>/dev/null

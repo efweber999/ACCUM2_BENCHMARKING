@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# March 2021 - Gene Weber
+# May 2021 - Gene Weber
 # This script uses hadoop mapreduce to run terasort
 # https://s905060.gitbooks.io/site-reliability-engineer-handbook/content/terasort_benchmark_suite.html
 # Settings are in acc_test.conf
@@ -14,12 +14,25 @@ source $INSTALL_DIR/acc_env_vars
 
 
 # Run mapreduce job
+
 # generate data for terasort.
 date
 yarn jar $MAPR teragen $TERASORT_ROWS tera_unsorted
+
 # run terasort map/reduce.
+echo ""
 date
+# Get Terasort start time.
+TS_ST=`date +%s`
 yarn jar $MAPR terasort tera_unsorted tera_sorted
+# Get Terasort end time.
+TS_ET=`date +%s`
+# Calculate duration of terasort
+TS_SECS=$(( $TS_ET - $TS_ST ))
+TS_DUR=`eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+echo "Terasort took: $TS_DUR"
+echo ""
+
 # validate that terasort ran correctly.
 date
 yarn jar $MAPR teravalidate tera_sorted tera_validated
@@ -28,7 +41,7 @@ date
 # Clean up so it can be run again
 echo ""
 echo "To run any part of this test again, the associated output file must be deleted."
-echo "hdfs dfs -rm -r /user/$LOGNAME/tera_unsorted"
-echo "hdfs dfs -rm -r /user/$LOGNAME/tera_sorted"
-echo "hdfs dfs -rm -r /user/$LOGNAME/tera_validated"
+echo "hdfs dfs -rm -skipTrash -r /user/$LOGNAME/tera_unsorted"
+echo "hdfs dfs -rm -skipTrash -r /user/$LOGNAME/tera_sorted"
+echo "hdfs dfs -rm -skipTrash -r /user/$LOGNAME/tera_validated"
 

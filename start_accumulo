@@ -1,7 +1,13 @@
 #!/bin/bash
 
-# April 2021 - Gene Weber
+# May 2021 - Gene Weber
 # This script launches Accumulo after running the installation script, and start_hadoop script.
+#
+# COMMAND LINE OPTION: If this script is launched with the command line option "split"
+# it will use the pre-split properties file, else it will use the no-split file.
+
+# Save command line option
+COMMAND_OPTION=$1
 
 # Location of existing directory on shared file system of installed software.
 INSTALL_DIR=`cat inst_dir`
@@ -10,12 +16,36 @@ source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
 
+# Based on command line option use no-split or pre-split properties file.
+if [ "$COMMAND_OPTION" == "split" ]; then
+  echo ""
+  echo "Setting the properties file to pre-split."
+  echo ""
+  cp $ACCUMULO_HOME/conf/accumulo.properties.pre-split $ACCUMULO_HOME/conf/accumulo.properties
+else
+  echo ""
+  echo "Setting the properties file to no-split."
+  echo ""
+  cp $ACCUMULO_HOME/conf/accumulo.properties.no-split $ACCUMULO_HOME/conf/accumulo.properties
+fi
+
+# Get Name of first Accumulo Master Node
+set -- $ACC_MASTER_NODES
+export FIRST_MASTER=$1
+
+# Initialize a new accumulo structure.
 echo ""
 echo "Initializing a new Accumulo database"
 echo ""
 
-# Initialize a new accumulo database
-pdsh -w ^$INSTALL_DIR/accmasternodes "echo -e '$ACC_DBASE_NAME\n$ACC_PASSWD\n$ACC_PASSWD\n' | accumulo init"
+# Check if the Accumulo database already exists.
+if `accumulo org.apache.accumulo.server.util.ListInstances 2>/dev/null | grep -q $ACC_DBASE_NAME`; then
+  # Delete existing entry from Zookeper and re-initialize 
+  pdsh -w $FIRST_MASTER "echo -e '$ACC_DBASE_NAME\ny\n$ACC_PASSWD\n$ACC_PASSWD\n' | accumulo init"
+else
+  # Initialize a new accumulo database
+  pdsh -w $FIRST_MASTER "echo -e '$ACC_DBASE_NAME\n$ACC_PASSWD\n$ACC_PASSWD\n' | accumulo init"
+fi
 
 echo ""
 echo "Starting the Accumulo Monitor"
@@ -29,6 +59,9 @@ echo "Starting the Accumulo Tablet Servers"
 echo ""
 
 # Start the accumulo tablet servers
+# Play a game with accumulo-env.sh to make every tserver on a node have a unique ProcessName in the metrics file.
+# See: https://github.com/apache/accumulo/issues/1337
+cp -n $ACCUMULO_CONF_DIR/accumulo-env.sh $ACCUMULO_CONF_DIR/X_accumulo-env.sh
 for node in $ACC_TSERVER_NODES
 do
   for (( i=1; i<=$TABS_PER_NODE; i++ ))
@@ -36,9 +69,30 @@ do
     echo "Starting tserver-${i} on $node"
     LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.log"
     ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.err"
+    # Temporarily add two lines to the end of accumulo-env.sh modifying the JAVA_OPTS variable.
+    echo "JAVA_OPTS=(\"\${JAVA_OPTS[@]}\" \"-Daccumulo.metrics.service.instance=$i\")" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
+    echo "export JAVA_OPTS" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
+    # Need to wait till tserver starts before restoring accumulo-env.sh
+    # Capture the current number of tserver processes running on the node. Wait until the new one is
+    # also running, or until a watchdog timer indicates it didn't start.
+    INIT_PROCS=`pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}'`
+    NUM_PROCS=$INIT_PROCS; WATCHDOG=0
     pdsh -w $node "nohup accumulo tserver >$LOGFILE 2>$ERRFILE < /dev/null &"
+    while [ $INIT_PROCS -eq $NUM_PROCS ]
+    do
+      NUM_PROCS=`pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}'`
+      ((WATCHDOG++))
+      if [ $WATCHDOG -ge 100 ]; then
+        NUM_PROCS=999
+        echo "tserver did not start."
+      fi
+    done
+    # Now that tserver process has started (hopefully) restore the accumulo-env.sh file.
+    cp $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
   done
 done
+# "Permanently" restore the file now that loop is complete.
+mv $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
 # Separate loop gives processes some time to startup
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/tservers.pid"
 for node in $ACC_TSERVER_NODES
@@ -104,3 +158,5 @@ echo "If this looked successful you can now run the accumulo_tests script."
 echo "The stop_accumulo script will terminate accumulo processes and clean up."
 echo "NOTE: To run Accumulo commands from the command line you must first: source $INSTALL_DIR/acc_env_vars"
 echo ""
+
+rm acc_stopped_flag 2>/dev/null  # Clear flag that accumulo has been stopped

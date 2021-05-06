@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021 - Gene Weber
 # This script runs bulk ingest. A map reduce job
 # generates rfiles based on number of table splits setting.
 # Nodes are generated per map task. Map tasks are run each loop.
@@ -25,8 +25,8 @@ source $INSTALL_DIR/acc_env_vars
 # Remove any files from previous runs.
 echo ""
 echo "Removing any files from previous runs."
-hdfs dfs -rm -r -f /tmp/ci-verify 2>/dev/null
-hdfs dfs -rm -r -f /tmp/bt/*/files 2>/dev/null
+hdfs dfs -rm -skipTrash -r -f /tmp/ci-verify 2>/dev/null
+hdfs dfs -rm -skipTrash -r -f /tmp/bt/*/files 2>/dev/null
 rm /$LOCAL_NVME1/$ACC_LOG_DIR/bulk-ingest* 2>/dev/null
 rm /$LOCAL_NVME1/$ACC_LOG_DIR/bulk-verify* 2>/dev/null
 

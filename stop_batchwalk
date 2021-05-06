@@ -6,3 +6,4 @@
 
 # Call generic stop clients script specifying batchwalk.
 ./stop_clients batchwalk
+rm client_stop 2>/dev/null
