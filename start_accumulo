@@ -10,7 +10,7 @@
 COMMAND_OPTION=$1
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.
@@ -39,7 +39,7 @@ echo "Initializing a new Accumulo database"
 echo ""
 
 # Check if the Accumulo database already exists.
-if `accumulo org.apache.accumulo.server.util.ListInstances 2>/dev/null | grep -q $ACC_DBASE_NAME`; then
+if $(accumulo org.apache.accumulo.server.util.ListInstances 2>/dev/null | grep -q $ACC_DBASE_NAME); then
   # Delete existing entry from Zookeper and re-initialize 
   pdsh -w $FIRST_MASTER "echo -e '$ACC_DBASE_NAME\ny\n$ACC_PASSWD\n$ACC_PASSWD\n' | accumulo init"
 else
@@ -75,12 +75,12 @@ do
     # Need to wait till tserver starts before restoring accumulo-env.sh
     # Capture the current number of tserver processes running on the node. Wait until the new one is
     # also running, or until a watchdog timer indicates it didn't start.
-    INIT_PROCS=`pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}'`
+    INIT_PROCS=$(pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}')
     NUM_PROCS=$INIT_PROCS; WATCHDOG=0
     pdsh -w $node "nohup accumulo tserver >$LOGFILE 2>$ERRFILE < /dev/null &"
     while [ $INIT_PROCS -eq $NUM_PROCS ]
     do
-      NUM_PROCS=`pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}'`
+      NUM_PROCS=$(pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}')
       ((WATCHDOG++))
       if [ $WATCHDOG -ge 100 ]; then
         NUM_PROCS=999
@@ -144,9 +144,9 @@ bye
 EOT
 
 if [ "$AWS" = true ]; then
-  PROXY=`cat $INSTALL_DIR/accmonitornodes | sed 's/^/ip-/' | sed 's/\./-/g' | sed 's/$/\.evoforge\.org/'`
+  PROXY=$(cat $INSTALL_DIR/accmonitornodes | sed 's/^/ip-/' | sed 's/\./-/g' | sed 's/$/\.evoforge\.org/')
 else
-  PROXY=`cat $INSTALL_DIR/accmonitornodes`
+  PROXY=$(cat $INSTALL_DIR/accmonitornodes)
 fi
 echo ""
 echo "You can view Accumulo monitor page at:"
@@ -156,7 +156,10 @@ echo ""
 echo ""
 echo "If this looked successful you can now run the accumulo_tests script."
 echo "The stop_accumulo script will terminate accumulo processes and clean up."
-echo "NOTE: To run Accumulo commands from the command line you must first: source $INSTALL_DIR/acc_env_vars"
+echo ""
+echo "NOTE: TO RUN ACCUMULO COMMANDS FROM THE COMMAND LINE YOU MUST FIRST:"
+echo "source acc_test.conf"
+echo "source \$INSTALL_DIR/acc_env_vars"
 echo ""
 
 rm acc_stopped_flag 2>/dev/null  # Clear flag that accumulo has been stopped

@@ -38,7 +38,7 @@ done
 # Check that required environment variables are set. Add variables to be checked with space between each.
 for env_var in JAVA_HOME
 do
-  if [ -z "`printenv $env_var`" ]; then
+  if [ -z "$(printenv $env_var)" ]; then
     echo ""
     echo "Environmental variable $env_var is not set. This is required by this script."
     echo ""
@@ -127,7 +127,7 @@ if [ $ALL_PRESENT = false ]; then
 fi
 
 # Verify that Open Files ulimits are set high enough.
-if [ "`ulimit -Hn`" -lt "$OF_ULIMIT" ]  || [ "`ulimit -Sn`" -lt "$OF_ULIMIT" ]; then
+if [ "$(ulimit -Hn)" -lt "$OF_ULIMIT" ]  || [ "$(ulimit -Sn)" -lt "$OF_ULIMIT" ]; then
   echo ""
   echo "The soft and hard limits for number of open files must be greater than or equal"
   echo "to $OF_ULIMIT. Edit /etc/security/limits.conf and set the following:"
@@ -136,6 +136,13 @@ if [ "`ulimit -Hn`" -lt "$OF_ULIMIT" ]  || [ "`ulimit -Sn`" -lt "$OF_ULIMIT" ]; 
   echo ""
   exit 1
 fi
+
+# Create all_nodes file.
+rm $INSTALL_DIR/all_nodes 2> /dev/null > /dev/null
+for node in $ALL_NODES
+do
+  echo $node >> $INSTALL_DIR/all_nodes
+done
 
 # If this is running on AWS, set up the NVMe drives.
 # If it's not AWS assume the NVMe drives are already mounted.
@@ -172,9 +179,9 @@ echo ""
 PERMISSIONS=true
 for drive in $NVME_MOUNTS
 do
-  for node in `cat $INSTALL_DIR/all_nodes`
+  for node in $(cat $INSTALL_DIR/all_nodes)
   do
-    if [ "`pdsh -w $node "stat -c %a /$drive" | sed 's/^.*: //'`" != "777" ]; then
+    if [ "$(pdsh -w $node "stat -c %a /${drive}${LOCAL_BASE_DIR}" | sed 's/^.*: //')" != "777" ]; then
       PERMISSIONS=false
     fi
   done
@@ -191,9 +198,9 @@ echo ""
 echo "Checking that system swapiness for all nodes is zero."
 echo ""
 TEMP="0"
-for node in `cat $INSTALL_DIR/all_nodes`
+for node in $(cat $INSTALL_DIR/all_nodes)
 do
-  SWAPPINESS=`pdsh -w $node "cat /proc/sys/vm/swappiness" | sed 's/^.*: //'`
+  SWAPPINESS=$(pdsh -w $node "cat /proc/sys/vm/swappiness" | sed 's/^.*: //')
   echo "$node = $SWAPPINESS"
   if [ "$SWAPPINESS" != "0" ]; then
     TEMP=$SWAPPINESS
@@ -209,8 +216,8 @@ fi
 
 # Confirm installation before proceeding.
 echo ""
-echo "    >>> `java -version 2>&1 | grep version`"
-echo "    >>> `gcc --version 2>&1 | grep gcc`"
+echo "    >>> $(java -version 2>&1 | grep version)"
+echo "    >>> $(gcc --version 2>&1 | grep gcc)"
 echo "NOTE: This script was tested with openjdk 1.8, and requires gcc 5.1 or greater."
 echo ""
 read -p "Software will be installed at $INSTALL_DIR. Proceed (y/n): " ANS
@@ -269,67 +276,65 @@ for node in $HADOOP_WORKER_NODES
 do
   echo $node >> $INSTALL_DIR/had_wkr_nodes
 done
-cat $INSTALL_DIR/had_rsc_node $INSTALL_DIR/had_wkr_nodes > $INSTALL_DIR/pdsh_nodes
-cat $INSTALL_DIR/had_nam_node $INSTALL_DIR/pdsh_nodes > $INSTALL_DIR/all_nodes
 
 # Create the Hadoop DFS data node directory comma separated list of NVME drives.
 DATA_NODE_LIST=""
 for drive in $NVME_MOUNTS
 do
   if [ -z "$DATA_NODE_LIST" ]; then
-    DATA_NODE_LIST="file:///${drive}/hadoop/tmp/dfs/data"
+    DATA_NODE_LIST="file:///${drive}${LOCAL_BASE_DIR}/hadoop/tmp/dfs/data"
   else
-    DATA_NODE_LIST="${DATA_NODE_LIST},file:///${drive}/hadoop/tmp/dfs/data"
+    DATA_NODE_LIST="${DATA_NODE_LIST},file:///${drive}${LOCAL_BASE_DIR}/hadoop/tmp/dfs/data"
   fi
 done
 
 # Create Hadoop configuration patch files.
 cat patch/core-site.xml.base |\
- sed "s/HADOOP_NAME_NODE/$HADOOP_NAME_NODE/" |\
+ sed "s|HADOOP_NAME_NODE|$HADOOP_NAME_NODE|" |\
  sed "s|TMP_HADOOP_DIRS|$TMP_HADOOP_DIRS|" |\
- sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ sed "s|LOCAL_NVME1|$LOCAL_NVME1|" \
  > patch/core-site.xml.patch
 cat patch/hadoop-env.sh.base |\
  sed "s|JAVA_HOME_PATH|$JAVA_HOME|" |\
- sed "s/LOCAL_NVME1/$LOCAL_NVME1/" |\
- sed "s/H_PID_DIR/$H_PID_DIR/" |\
+ sed "s|LOCAL_NVME1|$LOCAL_NVME1|" |\
+ sed "s|H_PID_DIR|$H_PID_DIR|" |\
  sed "s|H_LOG_DIR|$H_LOG_DIR|" |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
- sed "s/HAD_HIS_HEAP/$HAD_HIS_HEAP/" |\
- sed "s/HAD_NAM_HEAP/$HAD_NAM_HEAP/" |\
- sed "s/HAD_DAT_HEAP/$HAD_DAT_HEAP/" \
+ sed "s|HAD_HIS_HEAP|$HAD_HIS_HEAP|" |\
+ sed "s|HAD_NAM_HEAP|$HAD_NAM_HEAP|" |\
+ sed "s|HAD_DAT_HEAP|$HAD_DAT_HEAP|" \
  > patch/hadoop-env.sh.patch
 cat patch/yarn-site.xml.base |\
- sed "s/HADOOP_RESOURCE_NODE/$HADOOP_RESOURCE_NODE/" |\
- sed "s/YARN_MR_RES/$YARN_MR_RES/" |\
- sed "s/YARN_SCH_MIN/$YARN_SCH_MIN/" |\
- sed "s/YARN_SCH_MAX/$YARN_SCH_MAX/" |\
- sed "s/YARN_NM_RES/$YARN_NM_RES/" |\
+ sed "s|HADOOP_RESOURCE_NODE|$HADOOP_RESOURCE_NODE|" |\
+ sed "s|YARN_MR_RES|$YARN_MR_RES|" |\
+ sed "s|YARN_SCH_MIN|$YARN_SCH_MIN|" |\
+ sed "s|YARN_SCH_MAX|$YARN_SCH_MAX|" |\
+ sed "s|YARN_NM_RES|$YARN_NM_RES|" |\
  sed "s|WORKER_NODES_FILE|$INSTALL_DIR/had_wkr_nodes|" |\
- sed "s/YARN_VCORES_MIN/$YARN_VCORES_MIN/" |\
- sed "s/YARN_VCORES_MAX/$YARN_VCORES_MAX/" \
+ sed "s|YARN_VCORES_MIN|$YARN_VCORES_MIN|" |\
+ sed "s|YARN_VCORES_MAX|$YARN_VCORES_MAX|" \
  > patch/yarn-site.xml.patch
 cat patch/mapred-site.xml.base |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
- sed "s/MAPRED_MAP_JOPT/$MAPRED_MAP_JOPT/" |\
- sed "s/MAPRED_MAP_MEM/$MAPRED_MAP_MEM/" |\
- sed "s/MAPRED_RED_JOPT/$MAPRED_RED_JOPT/" |\
- sed "s/MAPRED_RED_MEM/$MAPRED_RED_MEM/" |\
- sed "s/YARN_AM_VCORES/$YARN_AM_VCORES/" |\
- sed "s/MAPRED_MAP_VCORES/$MAPRED_MAP_VCORES/" |\
- sed "s/MAPRED_RED_VCORES/$MAPRED_RED_VCORES/" \
+ sed "s|MAPRED_MAP_JOPT|$MAPRED_MAP_JOPT|" |\
+ sed "s|MAPRED_MAP_MEM|$MAPRED_MAP_MEM|" |\
+ sed "s|MAPRED_RED_JOPT|$MAPRED_RED_JOPT|" |\
+ sed "s|MAPRED_RED_MEM|$MAPRED_RED_MEM|" |\
+ sed "s|YARN_AM_VCORES|$YARN_AM_VCORES|" |\
+ sed "s|MAPRED_MAP_VCORES|$MAPRED_MAP_VCORES|" |\
+ sed "s|MAPRED_RED_VCORES|$MAPRED_RED_VCORES|" \
  > patch/mapred-site.xml.patch
 cat patch/hdfs-site.xml.base |\
  sed "s|DATA_NODE_LIST|$DATA_NODE_LIST|" |\
- sed "s/RESERVED_SPACE/$RESERVED_SPACE/" |\
+ sed "s|RESERVED_SPACE|$RESERVED_SPACE|" |\
  sed "s|OOO_WR_DIR|$OOO_WR_DIR|" |\
- sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ sed "s|LOCAL_NVME1|$LOCAL_NVME1|" \
  > patch/hdfs-site.xml.patch
 cat patch/yarn-env.sh.base |\
- sed "s/YARN_RM_HEAP/$YARN_RM_HEAP/" |\
- sed "s/YARN_NM_HEAP/$YARN_NM_HEAP/" |\
- sed "s/YARN_NM_JOPT/$YARN_NM_JOPT/" |\
- sed "s/YARN_PRX_HEAP/$YARN_PRX_HEAP/" \
+ sed "s|YARN_RM_HEAP|$YARN_RM_HEAP|" |\
+ sed "s|YARN_NM_HEAP|$YARN_NM_HEAP|" |\
+ sed "s|YARN_NM_JOPT|$YARN_NM_JOPT|" |\
+ sed "s|YARN_PRX_HEAP|$YARN_PRX_HEAP|" \
  > patch/yarn-env.sh.patch
 
 # Patch Hadoop configuration files.
@@ -350,7 +355,7 @@ echo ""
 # Untar Zookeeper
 if [ ! -d $ZOO_HOME ]; then
   tar -xvf $ZOOKEEPER -C $INSTALL_DIR
-  mv `find $INSTALL_DIR/* -maxdepth 0 -type d  | grep zookeeper` $ZOO_HOME
+  mv $(find $INSTALL_DIR/* -maxdepth 0 -type d  | grep zookeeper) $ZOO_HOME
 fi
 cp -n $ZOO_HOME/conf/log4j.properties $ZOO_HOME/conf/orig_log4j.properties
 cp $ZOO_HOME/conf/zoo_sample.cfg $ZOO_HOME/conf/zookeeper.cfg 
@@ -377,16 +382,16 @@ do
   export ZOO_NODE$i=""
 done
 cat patch/zookeeper.cfg.base |\
- sed "s/ZOO_NODE1/$ZOO_NODE1/" |\
- sed "s/ZOO_USE2/$ZOO_USE2/" |\
- sed "s/ZOO_NODE2/$ZOO_NODE2/" |\
- sed "s/ZOO_USE3/$ZOO_USE3/" |\
- sed "s/ZOO_NODE3/$ZOO_NODE3/" |\
- sed "s/ZOO_USE4/$ZOO_USE4/" |\
- sed "s/ZOO_NODE4/$ZOO_NODE4/" |\
- sed "s/ZOO_USE5/$ZOO_USE5/" |\
- sed "s/ZOO_NODE5/$ZOO_NODE5/" |\
- sed "s/LOCAL_NVME1/$LOCAL_NVME1/" \
+ sed "s|ZOO_NODE1|$ZOO_NODE1|" |\
+ sed "s|ZOO_USE2|$ZOO_USE2|" |\
+ sed "s|ZOO_NODE2|$ZOO_NODE2|" |\
+ sed "s|ZOO_USE3|$ZOO_USE3|" |\
+ sed "s|ZOO_NODE3|$ZOO_NODE3|" |\
+ sed "s|ZOO_USE4|$ZOO_USE4|" |\
+ sed "s|ZOO_NODE4|$ZOO_NODE4|" |\
+ sed "s|ZOO_USE5|$ZOO_USE5|" |\
+ sed "s|ZOO_NODE5|$ZOO_NODE5|" |\
+ sed "s|LOCAL_NVME1|$LOCAL_NVME1|" \
  > patch/zookeeper.cfg.patch
 cat patch/zoo_log4j.properties.base > patch/zoo_log4j.properties.patch
 
@@ -444,20 +449,20 @@ cat patch/acc_log4j-service.properties.base > patch/acc_log4j-service.properties
 cat patch/acc_log4j-monitor.properties.base > patch/acc_log4j-monitor.properties.patch
 cat patch/accumulo.properties.pre-split.base > patch/accumulo.properties.pre-split.patch
 cat patch/accumulo-client.properties.base |\
- sed "s/ACC_DBASE_NAME/$ACC_DBASE_NAME/" |\
- sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
- sed "s/ZOO_SESSION_TIMEOUT/$ZOO_SESSION_TIMEOUT/" |\
- sed "s/ACC_USERNAME/$ACC_USERNAME/" |\
- sed "s/BATCH_WRITE_TIMEOUT/$BATCH_WRITE_TIMEOUT/" |\
- sed "s/ACC_PASSWD/$ACC_PASSWD/" \
+ sed "s|ACC_DBASE_NAME|$ACC_DBASE_NAME|" |\
+ sed "s|ZOO_INSTANCES|$ZOO_INSTANCES|" |\
+ sed "s|ZOO_SESSION_TIMEOUT|$ZOO_SESSION_TIMEOUT|" |\
+ sed "s|ACC_USERNAME|$ACC_USERNAME|" |\
+ sed "s|BATCH_WRITE_TIMEOUT|$BATCH_WRITE_TIMEOUT|" |\
+ sed "s|ACC_PASSWD|$ACC_PASSWD|" \
  > patch/accumulo-client.properties.patch
 cat patch/accumulo.properties.base |\
- sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
- sed "s/DFS_INSTANCE_VOL/$DFS_INSTANCE_VOL/" |\
- sed "s/TSERV_PORT_CLIENT/$TSERV_PORT_CLIENT/" \
+ sed "s|ZOO_INSTANCES|$ZOO_INSTANCES|" |\
+ sed "s|DFS_INSTANCE_VOL|$DFS_INSTANCE_VOL|" |\
+ sed "s|TSERV_PORT_CLIENT|$TSERV_PORT_CLIENT|" \
  > patch/accumulo.properties.patch
 cat patch/accumulo-env.sh.base |\
- sed "s/LOCAL_NVME1/$LOCAL_NVME1/" |\
+ sed "s|LOCAL_NVME1|$LOCAL_NVME1|" |\
  sed "s|ACC_LOG_DIR|$ACC_LOG_DIR|" |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
  sed "s|HADOOP_CONF_DIR_PATH|$HADOOP_CONF_DIR|" |\
@@ -484,7 +489,7 @@ patch $ACCUMULO_HOME/bin/accumulo-service patch/accumulo-service.patch
 
 # Compile Accumulo native libraries if they don't exist
 if [ ! -d "$ACCUMULO_HOME/lib/native" ]; then
-  HERE=`pwd`
+  HERE=$(pwd)
   # Upgrade gcc for centos7 if this is running on AWS
   if [ "$AWS" = true ]; then
     source /opt/rh/devtoolset-8/enable
@@ -519,7 +524,7 @@ echo ""
 INSTALL_TESTS=false
 if [ ! -d $ACCUMULO_TESTS_HOME ]; then
   INSTALL_TESTS=true
-  HERE=`pwd`
+  HERE=$(pwd)
   cd $INSTALL_DIR
   unzip $HERE/$ACCUMULO_TESTS
   cd $HERE
@@ -531,10 +536,10 @@ cp -n $ACCUMULO_TESTS_HOME/conf/env.sh $ACCUMULO_TESTS_HOME/conf/orig_env.sh
 # Create Accumulo Tests configuration patch files.
 cat patch/acc_tests_log4j.properties.base > patch/acc_tests_log4j.properties.patch
 cat patch/accumulo-testing.properties.base |\
- sed "s/HADOOP_NAME_NODE/$HADOOP_NAME_NODE/" |\
- sed "s/HADOOP_RESOURCE_NODE/$HADOOP_RESOURCE_NODE/" |\
- sed "s/YARN_SCH_MAX/$YARN_SCH_MAX/" |\
- sed "s/YARN_VCORES_MAX/$YARN_VCORES_MAX/" \
+ sed "s|HADOOP_NAME_NODE|$HADOOP_NAME_NODE|" |\
+ sed "s|HADOOP_RESOURCE_NODE|$HADOOP_RESOURCE_NODE|" |\
+ sed "s|YARN_SCH_MAX|$YARN_SCH_MAX|" |\
+ sed "s|YARN_VCORES_MAX|$YARN_VCORES_MAX|" \
  > patch/accumulo-testing.properties.patch
 cat patch/acc_tests_env.sh.base |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
@@ -552,7 +557,25 @@ if [ $INSTALL_TESTS = true ]; then
   echo ""
   echo "Building Apache Accumulo Testing SNAPSHOTs"
   echo ""
- $ACCUMULO_TESTS_HOME/bin/build
+  if [ "$AWS" = true ]; then
+    $ACCUMULO_TESTS_HOME/bin/build
+  else
+    if [ ! -d ~/.m2/repository ]; then  # Directory does not exist.
+      if [ ! -d ~/.m2 ]; then  # Directory does not exist.
+        mkdir ~/.m2
+      fi
+      tar -xvf m2_repository.tar.gz -C ~/.m2  # Untar repository under .m2
+    else
+      RESTORE=true
+      mv ~/.m2/repository .  # Save current repository.
+      tar -xvf m2_repository.tar.gz -C ~/.m2  # Untar repository under .m2
+    fi
+    $ACCUMULO_TESTS_HOME/bin/build
+    rm -r ~/.m2/repository
+    if [ "$RESTORE" = true ]; then
+      mv repository ~/.m2
+    fi
+  fi
 fi
 
 # Compile create_splits program
@@ -571,7 +594,7 @@ if [ $INSTALL_PROXY = true ]; then
   
   # Check if the Accumulo Proxy software directory exists. If not, install it.
   if [ ! -d $ACC_PROXY_HOME ]; then
-    HERE=`pwd`
+    HERE=$(pwd)
     # Check if the proxy main.zip has already been unzipped into a directory. If not, do so.
     if [ ! -d $ACC_PROXY_BUILD ]; then
       cd $INSTALL_DIR
@@ -597,7 +620,7 @@ if [ $INSTALL_PROXY = true ]; then
       # Untar the compiled proxy software.
       tar -xvf accumulo-proxy-main/target/$ACC_PROXY
       # Shorten the directory name.
-      mv `find $INSTALL_DIR/* -maxdepth 0 -type d  | grep "proxy-2"` $ACC_PROXY_HOME
+      mv $(find $INSTALL_DIR/* -maxdepth 0 -type d  | grep "proxy-2") $ACC_PROXY_HOME
     fi
     cd $HERE
   fi
@@ -608,10 +631,10 @@ if [ $INSTALL_PROXY = true ]; then
   
   # Create Accumulo Proxy properties patch files.
   cat patch/proxy.properties.base |\
-   sed "s/ACC_DBASE_NAME/$ACC_DBASE_NAME/" |\
-   sed "s/ZOO_INSTANCES/$ZOO_INSTANCES/" |\
-   sed "s/ACC_USERNAME/$ACC_USERNAME/" |\
-   sed "s/ACC_PASSWD/$ACC_PASSWD/" \
+   sed "s|ACC_DBASE_NAME|$ACC_DBASE_NAME|" |\
+   sed "s|ZOO_INSTANCES|$ZOO_INSTANCES|" |\
+   sed "s|ACC_USERNAME|$ACC_USERNAME|" |\
+   sed "s|ACC_PASSWD|$ACC_PASSWD|" \
    > patch/proxy.properties.patch
   
   # Patch Accumulo proxy property file.
@@ -629,8 +652,22 @@ echo ""
 rm patch/*.patch
 
 # Save copy & Modify .bashrc to setup path and environmental variables
-pdsh -w ^$INSTALL_DIR/all_nodes 'cp -n $HOME/.bashrc $HOME/.good_bashrc'
-pdsh -w ^$INSTALL_DIR/all_nodes "echo 'source $INSTALL_DIR/acc_env_vars' >> $HOME/.bashrc"
+if [ "$AWS" = true ]; then
+  pdsh -w ^$INSTALL_DIR/all_nodes 'cp -n $HOME/.bashrc $HOME/.good_bashrc'
+  pdsh -w ^$INSTALL_DIR/all_nodes "echo 'source $INSTALL_DIR/acc_env_vars' >> $HOME/.bashrc"
+else
+  cp -n $HOME/.bashrc $HOME/.good_bashrc
+  # Line with $- = *i* causes return if not an interactive shell. Need to add source line
+  # before this line, and at the very end of the modified .bashrc to ensure execution.
+  HEAD_NUM=$(grep -n "\$- *= *\*i\*" $HOME/.bashrc | sed 's/:.$//')
+  TAIL_NUM=$HEAD_NUM
+  ((HEAD_NUM--))
+  head -$HEAD_NUM $HOME/.bashrc > temp_bashrc
+  echo "source $INSTALL_DIR/acc_env_vars" >> temp_bashrc
+  tail -n +$TAIL_NUM $HOME/.bashrc >> temp_bashrc
+  echo "source $INSTALL_DIR/acc_env_vars" >> temp_bashrc
+  mv temp_bashrc $HOME/.bashrc
+fi
 source $HOME/.bashrc
 
 echo ""

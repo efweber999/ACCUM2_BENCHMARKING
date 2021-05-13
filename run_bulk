@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021 - Gene Weber 
 # This script simply launches the bulk_ingest script on the specified node.
 # See the bulk_ingest script for more information.
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.

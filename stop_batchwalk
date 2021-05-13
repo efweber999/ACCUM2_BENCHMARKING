@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021 - Gene Weber 
 # This script stops the batchwalk clients on the nodes running tservers.
 # All settings for this test are in acc_test.conf.
 

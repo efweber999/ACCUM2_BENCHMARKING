@@ -16,7 +16,7 @@
 #   accumulo shell -u root -p secret -e 'config -t ci -s table.split.threshold=32M'
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.

@@ -54,13 +54,13 @@ if [ "$COMMAND_OPTION" == "batch" ]; then
   echo ""
   ./stop_batchwalk
   LOGFILE="/$LOCAL_NVME1/data/accumulo/logs/batchwalk_*.log"
-  LOG_NAME="batchwalk_`date +%Y-%m-%d-%H:%M`.log"
+  LOG_NAME="batchwalk_$(date +%Y-%m-%d-%H:%M).log"
 else
   echo "Stopping the walk test."
   echo ""
   ./stop_walk
   LOGFILE="/$LOCAL_NVME1/data/accumulo/logs/walk_*.log"
-  LOG_NAME="walk_`date +%Y-%m-%d-%H:%M`.log"
+  LOG_NAME="walk_$(date +%Y-%m-%d-%H:%M).log"
 fi
 
 echo ""
@@ -71,11 +71,11 @@ echo ""
 > /$LOCAL_NVME1/walk_fsr 2>/dev/null
 
 # Get the total number of teserver nodes.
-NUM_NODES=`cat $INSTALL_DIR/acctservernodes | wc -l`
+NUM_NODES=$(cat $INSTALL_DIR/acctservernodes | wc -l)
 
 # Store the list of all nodes in TEMP, replacing all newlines
 # with spaces (the default field seperator)
-TEMP=`tr '\012' ' ' < $INSTALL_DIR/acctservernodes`
+TEMP=$(tr '\012' ' ' < $INSTALL_DIR/acctservernodes)
 NODE_LIST=($TEMP) # split to array $NODE_LIST
 
 # Copy all of the log files to the local drive of this node.
@@ -93,48 +93,47 @@ else
 fi
 
 # Number of scans
-FSR_LINES=`cat /$LOCAL_NVME1/walk_fsr | wc -l`
+FSR_LINES=$(cat /$LOCAL_NVME1/walk_fsr | wc -l)
 
 # Get the total number entries read.
 # The last field is the count of valid entries the scan traversed. Add 2 to this number,
 # one for the Found Start Row (FSR), and one for end of list found (SQR event). 
 if [ "$COMMAND_OPTION" == "batch" ]; then
-  ENTRIES_READ=`cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($4+2) } END { print int(sum) }'`
+  ENTRIES_READ=$(cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($4+2) } END { print int(sum) }')
 else
-  ENTRIES_READ=`cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($5+2) } END { print int(sum) }'`
+  ENTRIES_READ=$(cat /$LOCAL_NVME1/walk_fsr | awk '{ sum += ($5+2) } END { print int(sum) }')
 fi
-echo "TOT_MS: $TOT_MS"
 
 # Get the earliest and latest timestamps.
-FIRST_LAST=`cat /$LOCAL_NVME1/walk_fsr | awk '{print $2}' | sort | sed -e 1b -e '$!d'`
-FIRST=`echo $FIRST_LAST | awk '{print $1}'`
-LAST=`echo $FIRST_LAST | awk '{print $2}'`
+FIRST_LAST=$(cat /$LOCAL_NVME1/walk_fsr | awk '{print $2}' | sort | sed -e 1b -e '$!d')
+FIRST=$(echo $FIRST_LAST | awk '{print $1}')
+LAST=$(echo $FIRST_LAST | awk '{print $2}')
 
 # Calculate the test duration in seconds from timestamps in ms.
-TS_SECS=`awk "BEGIN{x=(($LAST-$FIRST)/1000); printf(\"%.0f\", x)}"`
+TS_SECS=$(awk "BEGIN{x=(($LAST-$FIRST)/1000); printf(\"%.0f\", x)}")
 
 # Calculate the read rate.
-READ_RATE=`awk "BEGIN{x=($ENTRIES_READ/$TS_SECS); printf(\"%.1f\", x)}"`
+READ_RATE=$(awk "BEGIN{x=($ENTRIES_READ/$TS_SECS); printf(\"%.1f\", x)}")
 
 # Calculate the total number of walk clients.
-TEMP=`awk "BEGIN {x=($NUM_TSERVER_NODES * $WALK_CLI_NODE); printf(\"%.0f\", x)}"`
+TEMP=$(awk "BEGIN {x=($NUM_TSERVER_NODES * $WALK_CLI_NODE); printf(\"%.0f\", x)}")
 # Format the number with thousands separator for readability.
-TOT_CLIENTS=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+TOT_CLIENTS=$(LC_NUMERIC=en_US printf "%'.d" $TEMP)
 
 # Calculate duration of test
-DURATION=`eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+DURATION=$(eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')")
 
 # Create log file name
 touch $LOG_NAME
 
 # Calculate number of tablets and rfiles.
-hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > /$LOCAL_NVME1/hdfs_temp
-NUM_RFILES=`cat /$LOCAL_NVME1/hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
-NUM_TABLETS=`cat /$LOCAL_NVME1/hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+hdfs dfs -ls -R /accumulo | grep "tables\/2\/" > /$LOCAL_NVME1/hdfs_temp
+NUM_RFILES=$(cat /$LOCAL_NVME1/hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}')
+NUM_TABLETS=$(cat /$LOCAL_NVME1/hdfs_temp | grep "^d" | wc -l | awk '{print $1}')
 
 # Print output
 printf  "\n \
-`uname -a` \
+$(uname -a) \
 \n\n \
 This test took: $DURATION\n \
 $FSR_LINES scans were recorded.\n \

@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021- Gene Weber 
 # This script runs a map reduce job that stresses Accumulo by reading and writing the continuous
 # ingest table. This map reduce job will write out an entry for every entry in the table.
 # Stop ingest before running this MapReduce job. Do not run more than one instance of
 # this MapReduce job concurrently against a table.
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.

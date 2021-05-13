@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# March 2021 - Gene Weber
+# May 2021 - Gene Weber
 # This script resets directories and file to their state prior to running acc_test_sw_install.
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.
@@ -32,11 +32,15 @@ cp $ACCUMULO_HOME/bin/orig_accumulo-service $ACCUMULO_HOME/bin/accumulo-service
 cp $ACCUMULO_TESTS_HOME/conf/orig_log4j.properties $ACCUMULO_TESTS_HOME/conf/log4j.properties
 cp $ACCUMULO_TESTS_HOME/conf/orig_accumulo-testing.properties $ACCUMULO_TESTS_HOME/conf/accumulo-testing.properties
 cp $ACCUMULO_TESTS_HOME/conf/orig_env.sh $ACCUMULO_TESTS_HOME/conf/env.sh
-cp $ACC_PROXY_HOME/conf/orig_proxy.properties $ACC_PROXY_HOME/conf/proxy.properties
+cp $ACC_PROXY_HOME/conf/orig_proxy.properties $ACC_PROXY_HOME/conf/proxy.properties 2>/dev/null
 
 
 # Restore .bashrc files.
-pdsh -w ^$INSTALL_DIR/all_nodes 'mv $HOME/.good_bashrc $HOME/.bashrc 2>/dev/null' 2>/dev/null
+if [ "$AWS" = true ]; then
+  pdsh -w ^$INSTALL_DIR/all_nodes 'mv $HOME/.good_bashrc $HOME/.bashrc 2>/dev/null' 2>/dev/null
+else
+  mv $HOME/.good_bashrc $HOME/.bashrc 2>/dev/null
+fi
 
 
 # Delete directories that were created

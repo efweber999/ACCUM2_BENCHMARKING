@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - March 2021
+# May 2021 - Gene Weber 
 # This script calls the generic stop clients script with the ingest client type.
 
 ./stop_clients ingest

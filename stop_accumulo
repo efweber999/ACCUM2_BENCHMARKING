@@ -5,7 +5,7 @@
 #
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.
@@ -18,8 +18,8 @@ echo ""
 # Stop the accumulo Proxy
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/acc_proxy.pid"
 # Using pkill to kill the children of the PID
-pdsh -w ^$INSTALL_DIR/acc_proxy_node "pkill -P \`cat $PIDFILE\`"
-pdsh -w ^$INSTALL_DIR/acc_proxy_node "kill \`cat $PIDFILE\`" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acc_proxy_node "pkill -P \$(cat $PIDFILE)"
+pdsh -w ^$INSTALL_DIR/acc_proxy_node "kill \$(cat $PIDFILE)" 2>/dev/null
 pdsh -w ^$INSTALL_DIR/acc_proxy_node "rm $PIDFILE"
 
 echo ""
@@ -52,7 +52,7 @@ PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/tservers.pid"
 for node in $ACC_TSERVER_NODES
 do
   echo "Stopping tservers on $node"
-  pdsh -w $node "kill \`cat $PIDFILE\`"
+  pdsh -w $node "kill \$(cat $PIDFILE)"
   pdsh -w $node "rm $PIDFILE"
 done
 

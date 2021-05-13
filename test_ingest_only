@@ -24,8 +24,8 @@ source $INSTALL_DIR/acc_env_vars
 # Calculate the fill value to reach during the continuous ingest test
 echo ""
 echo "Checking size of Hadoop file system."
-HDFS_STOR_SIZE=`hdfs dfs -df  / | tail -1 | awk '{print $2}'`
-CI_FILL_BYTES=`awk "BEGIN {x=$HDFS_STOR_SIZE*$CI_FILL_PERCENT; print int(x)}"`
+HDFS_STOR_SIZE=$(hdfs dfs -df  / | tail -1 | awk '{print $2}')
+CI_FILL_BYTES=$(awk "BEGIN {x=$HDFS_STOR_SIZE*$CI_FILL_PERCENT; print int(x)}")
 
 # Start the Continuous Ingest test.
 echo ""
@@ -35,7 +35,7 @@ if [ "$COMMAND_OPTION" == "split" ]; then
   echo ""
   ./run_ingest split
   SPLIT_CHOICE="was"
-  NUM_SPLITS=`wc -l splits | awk '{sum=$1+1};END{print sum}'`
+  NUM_SPLITS=$(wc -l splits | awk '{sum=$1+1};END{print sum}')
 else
   ./run_ingest
   SPLIT_CHOICE="was not"
@@ -43,25 +43,25 @@ else
 fi
 
 # Initialize loop and run until the specified amount of HDFS storage has been consumed.
-CUR_STORE_USED=`hdfs dfs -df | tail -1 | awk '{print $3}'`
-hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > hdfs_temp
-NUM_RFILES=`cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
-NUM_TABLETS=`cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+CUR_STORE_USED=$(hdfs dfs -df | tail -1 | awk '{print $3}')
+hdfs dfs -ls -R /accumulo | grep "tables\/2\/" > hdfs_temp
+NUM_RFILES=$(cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}')
+NUM_TABLETS=$(cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}')
 echo ""
 echo "Continuous Ingest has filled $CUR_STORE_USED towards $CI_FILL_BYTES. CI Tablets = $NUM_TABLETS, CI Rfiles = $NUM_RFILES"
 while [ $CUR_STORE_USED -le $CI_FILL_BYTES ]
 do
   sleep 5m
-  CUR_STORE_USED=`hdfs dfs -df | tail -1 | awk '{print $3}'`
-  hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" > hdfs_temp
-  NUM_RFILES=`cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}'`
-  NUM_TABLETS=`cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}'`
+  CUR_STORE_USED=$(hdfs dfs -df | tail -1 | awk '{print $3}')
+  hdfs dfs -ls -R /accumulo | grep "tables\/2\/" > hdfs_temp
+  NUM_RFILES=$(cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}')
+  NUM_TABLETS=$(cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}')
   echo "Continuous Ingest has filled $CUR_STORE_USED towards $CI_FILL_BYTES. CI Tablets = $NUM_TABLETS, CI Rfiles = $NUM_RFILES"
 done
 rm hdfs_temp
 
 # Get the ingest test start time.
-START_TIME=`cat ingest_start`
+START_TIME=$(cat ingest_start)
 rm ingest_start 2>/dev/null
 
 # Stop the Continuous Ingest test.
@@ -70,15 +70,15 @@ echo "Stopping Continuous Ingest clients."
 ./stop_ingest
 
 # Get the ingest test end time.
-END_TIME=`cat client_stop`
+END_TIME=$(cat client_stop)
 rm client_stop 2>/dev/null
 
 # Calculate duration of test
 TT_SECS=$(( $END_TIME - $START_TIME ))
-DURATION=`eval "echo $(date -ud "@$TT_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+DURATION=$(eval "echo $(date -ud "@$TT_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')")
 
 # Get post processing start time.
-PP_ST=`date +%s`
+PP_ST=$(date +%s)
 
 # Take the ci table offline so the rfiles are stable during results processing.
 echo ""
@@ -87,16 +87,16 @@ echo ""
 echo -e "flush -t ci -w\noffline -t ci -w\nsleep 5\nbye\n" | accumulo shell -u root
 
 # Get the total number of nodes available for post processing.
-NUM_NODES=`cat $INSTALL_DIR/all_nodes | wc -l`
+NUM_NODES=$(cat $INSTALL_DIR/all_nodes | wc -l)
 
 # Store the list of all nodes in TEMP, replacing all newlines
 # with spaces (the default field seperator)
-TEMP=`tr '\012' ' ' < $INSTALL_DIR/all_nodes`
+TEMP=$(tr '\012' ' ' < $INSTALL_DIR/all_nodes)
 NODE_LIST=($TEMP) # split to array $NODE_LIST
 
 # Generate a full HDFS path list of all rfiles associated with the ci table.
 echo ""; echo "Getting a list of all ci rfiles."
-RFILES=`hdfs dfs -ls -R /accumulo | grep ".*\/t-.*\.rf$" | awk '{print $8}'`
+RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/2\/.*\.rf$" | awk '{print $8}')
 
 # Create a run file for each of the nodes to execute. 1st line removes old value file.
 echo ""; echo "Creating processing run files."
@@ -153,11 +153,11 @@ echo "Processing complete."
 echo ""
 
 # Get the post processing end time.
-PP_ET=`date +%s`
+PP_ET=$(date +%s)
 
 # Calculate duration of post processing
 PP_SECS=$(( $PP_ET - $PP_ST ))
-PP_DUR=`eval "echo $(date -ud "@$PP_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+PP_DUR=$(eval "echo $(date -ud "@$PP_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')")
 
 # Bring the ci table back online so it is available for walk tests.
 echo ""
@@ -166,37 +166,37 @@ echo ""
 echo -e "online -t ci -w\nbye\n" | accumulo shell -u root
 
 # Sum the number of entries that were listed in every rfile.
-TABLE_ENTRIES=`cat /$LOCAL_NVME1/rfile_vals* | awk '{sum+=$1};END{print sum}'`
-FINAL_ENTRIES=`LC_NUMERIC=en_US printf "%'.d" $TABLE_ENTRIES` # Format for printing
+TABLE_ENTRIES=$(cat /$LOCAL_NVME1/rfile_vals* | awk '{sum+=$1};END{print sum}')
+FINAL_ENTRIES=$(LC_NUMERIC=en_US printf "%'.d" $TABLE_ENTRIES) # Format for printing
 
 # Calculate the total number of tservers.
-TEMP=`awk "BEGIN {x=($NUM_TSERVER_NODES * $TABS_PER_NODE); printf(\"%.0f\", x)}"`
+TEMP=$(awk "BEGIN {x=($NUM_TSERVER_NODES * $TABS_PER_NODE); printf(\"%.0f\", x)}")
 # Format the number with thousands separator for readability.
-TOT_TSERVERS=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+TOT_TSERVERS=$(LC_NUMERIC=en_US printf "%'.d" $TEMP)
 
 # Calculate records ingested per second.
-TEMP=`awk "BEGIN {x=($TABLE_ENTRIES/$TT_SECS); printf(\"%.0f\", x)}"`
+TEMP=$(awk "BEGIN {x=($TABLE_ENTRIES/$TT_SECS); printf(\"%.0f\", x)}")
 # Format the number with thousands separator for readability.
-INGEST_RATE=`LC_NUMERIC=en_US printf "%'.d" $TEMP`
+INGEST_RATE=$(LC_NUMERIC=en_US printf "%'.d" $TEMP)
 
 # Create log file name
-LOG_NAME="ingest_only_`date +%Y-%m-%d-%H:%M`.log"
+LOG_NAME="ingest_only_$(date +%Y-%m-%d-%H:%M).log"
 touch $LOG_NAME
 
 # Calculate percentage of Hadoop file system used.
-HDFS_PERCENT=`awk "BEGIN {x=($CUR_STORE_USED/$HDFS_STOR_SIZE)*100; printf(\"%.2f\", x)}"`
+HDFS_PERCENT=$(awk "BEGIN {x=($CUR_STORE_USED/$HDFS_STOR_SIZE)*100; printf(\"%.2f\", x)}")
 # Format numbers with thousands separator.
-STOR_SUBSYS=`LC_NUMERIC=en_US printf "%'.d" $HDFS_STOR_SIZE`
-STOR_USED=`LC_NUMERIC=en_US printf "%'.d" $CUR_STORE_USED`
+STOR_SUBSYS=$(LC_NUMERIC=en_US printf "%'.d" $HDFS_STOR_SIZE)
+STOR_USED=$(LC_NUMERIC=en_US printf "%'.d" $CUR_STORE_USED)
 
 # Calculate number of tablets created.
 # The assumption here is that all rfiles in a t-xxxxxxx directory comprise one tablet. I.E. each tablet has
-# its own t-xxxxxxx directory, so count those.
-NUM_TABLETS=`hdfs dfs -ls -R /accumulo | grep "tables" | grep "t-" | grep "^d" | wc -l`
+# its own directory, so count those.
+NUM_TABLETS=$(hdfs dfs -ls -R /accumulo | grep "tables\/2\/" | grep "^d" | wc -l)
 
 # Print output
 printf  "\n \
-`uname -a` \
+$(uname -a) \
 \n\n \
 This test took: $DURATION\n \
 Post processing of the results took: $PP_DUR\n \

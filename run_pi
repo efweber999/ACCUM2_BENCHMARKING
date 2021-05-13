@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# March 2021 - Gene Weber
+# May 2021 - Gene Weber
 # This script uses hadoop mapreduce to calculate pi
 # Settings are in acc_test.conf
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.

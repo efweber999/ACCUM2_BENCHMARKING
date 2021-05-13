@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Gene Weber - April 2021
+# May 2021 - Gene Weber 
 # This script is called by others and stops clients on the nodes running tservers.
 # The calling script passes in the type of client to stop as $1.
 # Used 3 loops instaed of 1 to improve accurace of test timing.
@@ -9,7 +9,7 @@
 CLIENT_TYPE=$1
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.
@@ -26,12 +26,12 @@ do
 done
 
 # Loop through each tserver node and kill $CLIENT_TYPE clients on each
-echo `date +%s` > client_stop
+echo $(date +%s) > client_stop
 for node in $ACC_TSERVER_NODES
 do
   echo "Stopping $CLIENT_TYPE clients on $node"
   pdsh -w $node "source temp2" 2>/dev/null # Don't background. Causes race with next line.
-  pdsh -w $node "kill \`cat $PIDFILE\` 2>/dev/null" 2>/dev/null &
+  pdsh -w $node "kill \$(cat $PIDFILE) 2>/dev/null" 2>/dev/null &
 done
 
 # Loop through each tserver node delete files

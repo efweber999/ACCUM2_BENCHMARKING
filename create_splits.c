@@ -56,10 +56,10 @@ int main(int argc, char *argv[]) {
   }
 
   // Calculate the size of the step between splits.
-  split_size = 0xFFFFFFFFFFFFFFFF / num_splits;
+  split_size = 0x7FFFFFFFFFFFFFFF / num_splits;
 
   // Calculate fractional remainder.
-  fraction = (double)(0xFFFFFFFFFFFFFFFF % num_splits) / (double)num_splits;
+  fraction = (double)(0x7FFFFFFFFFFFFFFF % num_splits) / (double)num_splits;
 
   // Set up a print loop. Add an extra 1 based on multiples of the remainder fraction.
   fp = fopen("splits", "w");

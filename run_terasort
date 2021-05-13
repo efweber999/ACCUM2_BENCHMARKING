@@ -6,7 +6,7 @@
 # Settings are in acc_test.conf
 
 # Location of existing directory on shared file system of installed software.
-INSTALL_DIR=`cat inst_dir`
+INSTALL_DIR=$(cat inst_dir)
 # Execute the configuration file to initialize all needed variables.
 source acc_test.conf
 # Get all needed environmental variables.
@@ -23,13 +23,13 @@ yarn jar $MAPR teragen $TERASORT_ROWS tera_unsorted
 echo ""
 date
 # Get Terasort start time.
-TS_ST=`date +%s`
+TS_ST=$(date +%s)
 yarn jar $MAPR terasort tera_unsorted tera_sorted
 # Get Terasort end time.
-TS_ET=`date +%s`
+TS_ET=$(date +%s)
 # Calculate duration of terasort
 TS_SECS=$(( $TS_ET - $TS_ST ))
-TS_DUR=`eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')"`
+TS_DUR=$(eval "echo $(date -ud "@$TS_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')")
 echo "Terasort took: $TS_DUR"
 echo ""
 
