@@ -44,7 +44,7 @@ fi
 
 # Initialize loop and run until the specified amount of HDFS storage has been consumed.
 CUR_STORE_USED=$(hdfs dfs -df | tail -1 | awk '{print $3}')
-hdfs dfs -ls -R /accumulo | grep "tables\/2\/" > hdfs_temp
+hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/" > hdfs_temp
 NUM_RFILES=$(cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}')
 NUM_TABLETS=$(cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}')
 echo ""
@@ -53,7 +53,7 @@ while [ $CUR_STORE_USED -le $CI_FILL_BYTES ]
 do
   sleep 5m
   CUR_STORE_USED=$(hdfs dfs -df | tail -1 | awk '{print $3}')
-  hdfs dfs -ls -R /accumulo | grep "tables\/2\/" > hdfs_temp
+  hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/" > hdfs_temp
   NUM_RFILES=$(cat hdfs_temp | grep "\.rf" | wc -l | awk '{print $1}')
   NUM_TABLETS=$(cat hdfs_temp | grep "^d" | wc -l | awk '{print $1}')
   echo "Continuous Ingest has filled $CUR_STORE_USED towards $CI_FILL_BYTES. CI Tablets = $NUM_TABLETS, CI Rfiles = $NUM_RFILES"
@@ -82,9 +82,10 @@ PP_ST=$(date +%s)
 
 # Take the ci table offline so the rfiles are stable during results processing.
 echo ""
-echo "Taking ci table offline. Waiting 5 seconds for that to complete."
+echo "Taking ci table offline. Waiting $OFFLINE_TAB_WAIT for that to complete."
 echo ""
-echo -e "flush -t ci -w\noffline -t ci -w\nsleep 5\nbye\n" | accumulo shell -u root
+echo -e "flush -t ci -w\noffline -t ci -w\nbye\n" | accumulo shell -u root
+sleep $OFFLINE_TAB_WAIT
 
 # Get the total number of nodes available for post processing.
 NUM_NODES=$(cat $INSTALL_DIR/all_nodes | wc -l)
@@ -96,7 +97,7 @@ NODE_LIST=($TEMP) # split to array $NODE_LIST
 
 # Generate a full HDFS path list of all rfiles associated with the ci table.
 echo ""; echo "Getting a list of all ci rfiles."
-RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/2\/.*\.rf$" | awk '{print $8}')
+RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/.*\.rf$" | awk '{print $8}')
 
 # Create a run file for each of the nodes to execute. 1st line removes old value file.
 echo ""; echo "Creating processing run files."
@@ -138,7 +139,7 @@ done
 # Launch processing run files on all nodes.
 echo ""; echo "Launching rfile processing on all nodes."
 rm /$LOCAL_NVME1/rfile_vals_* 2>/dev/null &
-pdsh -w ^$INSTALL_DIR/all_nodes "/$LOCAL_NVME1/rfile_gen" &
+pdsh -w ^$INSTALL_DIR/all_nodes "/$LOCAL_NVME1/rfile_gen"
 
 # Wait for all processing to be finished. Count backwards for margin as 0 is procesed on local node.
 echo ""; echo "Waiting for all nodes to finish processing their rfiles. This could take a while."
@@ -192,7 +193,7 @@ STOR_USED=$(LC_NUMERIC=en_US printf "%'.d" $CUR_STORE_USED)
 # Calculate number of tablets created.
 # The assumption here is that all rfiles in a t-xxxxxxx directory comprise one tablet. I.E. each tablet has
 # its own directory, so count those.
-NUM_TABLETS=$(hdfs dfs -ls -R /accumulo | grep "tables\/2\/" | grep "^d" | wc -l)
+NUM_TABLETS=$(hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/" | grep "^d" | wc -l)
 
 # Print output
 printf  "\n \

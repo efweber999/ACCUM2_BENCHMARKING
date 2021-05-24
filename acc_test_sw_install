@@ -24,7 +24,7 @@
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 # Check that required software tools are installed. Add tools to be checked with space between each.
-for tool in pdsh gcc java patch pkill
+for tool in pdsh gcc java patch pkill bc
 do
   if ! command -v $tool &> /dev/null
   then
@@ -126,6 +126,15 @@ if [ $ALL_PRESENT = false ]; then
   exit 1
 fi
 
+# If Accumulo is to be installed, verify that the GCC version is at least 5.1.
+G_VERS=$(gcc --version 2>&1 | head -1 | awk '{print $3}' | sed 's/\./-/' | sed 's/\..*$//' |sed 's/-/./')
+if [ ! -d $ACCUMULO_HOME ] && (( $(echo "$G_VERS < 5.1" | bc -l) )); then
+  echo ""
+  echo "Accumulo native library must be compiled with GCC 5.1 or greater."
+  echo ""
+  exit 1
+fi
+
 # Verify that Open Files ulimits are set high enough.
 if [ "$(ulimit -Hn)" -lt "$OF_ULIMIT" ]  || [ "$(ulimit -Sn)" -lt "$OF_ULIMIT" ]; then
   echo ""
@@ -212,19 +221,6 @@ if [ "$TEMP" != "0" ]; then
   echo "sudo sysctl vm.swappiness=0"
   echo ""
   exit 1
-fi
-
-# Confirm installation before proceeding.
-echo ""
-echo "    >>> $(java -version 2>&1 | grep version)"
-echo "    >>> $(gcc --version 2>&1 | grep gcc)"
-echo "NOTE: This script was tested with openjdk 1.8, and requires gcc 5.1 or greater."
-echo ""
-read -p "Software will be installed at $INSTALL_DIR. Proceed (y/n): " ANS
-if [ "$ANS" != "y" ]; then
-  echo "Goodbye"
-  echo ""
-  exit 0
 fi
 
 # Create needed directories on local NVMe drives
@@ -466,7 +462,8 @@ cat patch/accumulo-env.sh.base |\
  sed "s|ACC_LOG_DIR|$ACC_LOG_DIR|" |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
  sed "s|HADOOP_CONF_DIR_PATH|$HADOOP_CONF_DIR|" |\
- sed "s|ZOOKEEPER_HOME_PATH|$ZOO_HOME|" \
+ sed "s|ZOOKEEPER_HOME_PATH|$ZOO_HOME|" |\
+ sed "s|LIB64|$ZLIB64|" \
  > patch/accumulo-env.sh.patch
 cat patch/accumulo-service.base |\
  sed "s|PIDS_DIR|/$LOCAL_NVME1/$A_PID_DIR|" |\
@@ -674,6 +671,14 @@ echo ""
 echo "Worker node has a total memory = $TOTAL_MEM megabytes."
 echo "Node has $VCPUS CPUs."
 echo ""
+
+# Warn user if a different Java version is being run.
+J_VERS=$(java -version 2>&1 | head -1 | awk '{print $3}' | sed 's/"//g' | sed 's/\./-/' | sed 's/\..*$//' |sed 's/-/./')
+if [ ! $J_VERS == "1.8" ]; then
+  echo ""
+  echo "WARNING: This script was tested with openjdk 1.8."
+  echo ""
+fi
 
 echo ""
 echo "Before launching this script again, you must run the reset script."

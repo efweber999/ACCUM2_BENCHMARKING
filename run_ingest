@@ -51,9 +51,9 @@ done
 
 # Give Accumulo time to apply tablet splits and stabilize.
 if [ "$COMMAND_OPTION" == "split" ]; then
-  WAIT_TIME="5m"
+  WAIT_TIME=$NEW_TAB_WAIT_SPLIT
 else
-  WAIT_TIME="2m"
+  WAIT_TIME=$NEW_TAB_WAIT_NOSPLIT
 fi
 echo ""
 date
@@ -70,7 +70,12 @@ do
     LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.log"
     ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.err"
     # CI_OPTS (continuous ingest options) are set in acc_test.conf
-    pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &" &
+    # The following optimizes differently on different systems.
+    if [ "$AWS" = true ]; then
+      pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &" &
+    else
+      pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &"
+    fi
   done
 done
 echo $(date +%s) > ingest_start #Capture start time.

@@ -100,4 +100,5 @@ In addition to the standard tests, the user can run the two Accumulo benchmarkin
 #### Helper Programs
 The following additional programs are included in this release.
 * __create_splits__ - Generates a file named "splits" used for pre-splitting the ci table. Pass the number of desired splits in as the single command line argument. The entries in the ci table are hexadecimal numbers. This program generates a series of sixteen digit hex numbers as split points. 
+* __start_up__ - This script runs __acc_test_sw_install__, __start_hadoop__, and __start_accumulo__. It accepts "split" as a command line argument. If specified, __start_accumulo__ is executed with the "split" option.
 * __shut_down__ - This script simply runs __stop_accumulo__, __stop_hadoop__, and __reset__ in order. It is very important that __reset__ is run before executing __acc_test_sw_install__ again. Running __reset__ restores files and directories to the required state.
