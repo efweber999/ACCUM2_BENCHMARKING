@@ -14,9 +14,9 @@ source $INSTALL_DIR/acc_env_vars
 # Only move files and run via pdsh if running on a different node than logged into
 if [[ "$VER_NODE" != "$LOCAL_NODE" ]]; then
   cp inst_dir verify_table acc_test.conf $INSTALL_DIR
-  pdsh -w $VER_NODE 'cp /nfs/software/test/inst_dir .'
-  pdsh -w $VER_NODE 'cp /nfs/software/test/verify_table .'
-  pdsh -w $VER_NODE 'cp /nfs/software/test/acc_test.conf .'
+  pdsh -w $VER_NODE 'cp $INSTALL_DIR/inst_dir .'
+  pdsh -w $VER_NODE 'cp $INSTALL_DIR/verify_table .'
+  pdsh -w $VER_NODE 'cp $INSTALL_DIR/acc_test.conf .'
   pdsh -w $VER_NODE './verify_table'
   rm $INSTALL_DIR/inst_dir $INSTALL_DIR/verify_table $INSTALL_DIR/acc_test.conf
   pdsh -w $VER_NODE 'rm inst_dir verify_table acc_test.conf'

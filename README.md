@@ -27,7 +27,7 @@ Obviously there could be many derivations of these setup scripts. These could in
 9. These scripts assume CentOS 7.
 
 ## Usage
-After installing this package, the user will need to download these files from the appropriate locations on the internet:
+If this repository was cloned from github, the user will also need to download the following files from the appropriate locations on the internet prior to running the install script:
 * 2.0.zip - Accumulo 2.0 tests
 * accumulo-2.0.1-bin.tar.gz - Accumulo 2.0.1
 * apache-zookeeper-3.6.2-bin.tar.gz - Zookeeper 3.6.2
