@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script launches Accumulo after running the installation script, and start_hadoop script.
 #
 # COMMAND LINE OPTION: If this script is launched with the command line option "split"
@@ -15,6 +15,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 # Based on command line option use no-split or pre-split properties file.
 if [ "$COMMAND_OPTION" == "split" ]; then
@@ -70,8 +72,8 @@ do
     LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.log"
     ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.err"
     # Temporarily add two lines to the end of accumulo-env.sh modifying the JAVA_OPTS variable.
-    echo "JAVA_OPTS=(\"\${JAVA_OPTS[@]}\" \"-Daccumulo.metrics.service.instance=$i\")" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
-    echo "export JAVA_OPTS" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
+    # echo "JAVA_OPTS=(\"\${JAVA_OPTS[@]}\" \"-Daccumulo.metrics.service.instance=$i\")" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
+    # echo "export JAVA_OPTS" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
     # Need to wait till tserver starts before restoring accumulo-env.sh
     # Capture the current number of tserver processes running on the node. Wait until the new one is
     # also running, or until a watchdog timer indicates it didn't start.
@@ -88,7 +90,7 @@ do
       fi
     done
     # Now that tserver process has started (hopefully) restore the accumulo-env.sh file.
-    cp $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
+    # cp $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
   done
 done
 # "Permanently" restore the file now that loop is complete.
@@ -163,3 +165,5 @@ echo "source \$INSTALL_DIR/acc_env_vars"
 echo ""
 
 rm acc_stopped_flag 2>/dev/null  # Clear flag that accumulo has been stopped
+
+rm script_active

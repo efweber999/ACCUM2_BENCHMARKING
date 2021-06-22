@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script stops Accumulo, and cleans up.
 #
 
@@ -10,6 +10,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 echo ""
 echo "Stopping the Accumulo Proxy"
@@ -81,3 +83,5 @@ hdfs dfsadmin -report >/dev/null # This seems to force reclaimation of HDFS disk
 echo ""
 echo "If this looked successful, it's now safe to stop hadoop."
 echo ""
+
+rm script_active

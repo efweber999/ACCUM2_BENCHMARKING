@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script runs an ingest test until the specified percentage of HDFS file system is filled.
 # It calls the run_ingest and stop ingest scripts.
 #
@@ -20,6 +20,8 @@ COMMAND_OPTION=$1
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 # Calculate the fill value to reach during the continuous ingest test
 echo ""
@@ -219,3 +221,5 @@ pdsh -w ^$INSTALL_DIR/all_nodes "rm /$LOCAL_NVME1/rfile_* 2>/dev/null" & 2>/dev/
 
 echo "Please run ./run_verify to check the integrity of the CI table."
 echo ""
+
+rm script_active

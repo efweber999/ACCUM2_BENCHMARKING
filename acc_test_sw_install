@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script installs all software necessary to run an Accumulo 2.0.1 baseline test.
 # This includes: Maven 3.6.3, Zookeeper 3.6.2, hadoop 3.1.2, accumulo 2.0.1, and accumulo-testing 2.0
 # It optionally installs Accumulo Proxy 2.0.0
@@ -234,6 +234,12 @@ if [[ -d "/$LOCAL_NVME1/tmp" ]]; then
   pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/data"
   pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/hadoop"
 fi
+if [[ -d "/$LOCAL_NVME2/tmp" ]]; then
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME2/tmp"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME2/pids"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME2/data"
+  pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME2/hadoop"
+fi
 # Create directories
 pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/tmp"
 pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/pids"
@@ -244,6 +250,17 @@ pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/accumulo"
 pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/data/accumulo/logs"
 pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/hadoop"
 pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME1/hadoop/tmp"
+if [[ -d "/$LOCAL_NVME2" ]]; then
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/tmp"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/pids"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/data"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/data/hadoop"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/data/zookeeper"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/data/accumulo"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/data/accumulo/logs"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/hadoop"
+  pdsh -w ^$INSTALL_DIR/all_nodes "mkdir /$LOCAL_NVME2/hadoop/tmp"
+fi
 
 
 # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -463,7 +480,17 @@ cat patch/accumulo-env.sh.base |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
  sed "s|HADOOP_CONF_DIR_PATH|$HADOOP_CONF_DIR|" |\
  sed "s|ZOOKEEPER_HOME_PATH|$ZOO_HOME|" |\
- sed "s|LIB64|$ZLIB64|" \
+ sed "s|LIB64|$ZLIB64|" |\
+ sed "s|MSTR_MEM_HI|$MSTR_MEM_HI|" |\
+ sed "s|MSTR_MEM_LO|$MSTR_MEM_LO|" |\
+ sed "s|MON_MEM_HI|$MON_MEM_HI|" |\
+ sed "s|MON_MEM_LO|$MON_MEM_LO|" |\
+ sed "s|GC_MEM_HI|$GC_MEM_HI|" |\
+ sed "s|GC_MEM_LO|$GC_MEM_LO|" |\
+ sed "s|TSRV_MEM_HI|$TSRV_MEM_HI|" |\
+ sed "s|TSRV_MEM_LO|$TSRV_MEM_LO|" |\
+ sed "s|DFLT_MEM_HI|$DFLT_MEM_HI|" |\
+ sed "s|DFLT_MEM_LO|$DFLT_MEM_LO|" \
  > patch/accumulo-env.sh.patch
 cat patch/accumulo-service.base |\
  sed "s|PIDS_DIR|/$LOCAL_NVME1/$A_PID_DIR|" |\
@@ -654,16 +681,28 @@ if [ "$AWS" = true ]; then
   pdsh -w ^$INSTALL_DIR/all_nodes "echo 'source $INSTALL_DIR/acc_env_vars' >> $HOME/.bashrc"
 else
   cp -n $HOME/.bashrc $HOME/.good_bashrc
-  # Line with $- = *i* causes return if not an interactive shell. Need to add source line
-  # before this line, and at the very end of the modified .bashrc to ensure execution.
-  HEAD_NUM=$(grep -n "\$- *= *\*i\*" $HOME/.bashrc | sed 's/:.$//')
-  TAIL_NUM=$HEAD_NUM
-  ((HEAD_NUM--))
-  head -$HEAD_NUM $HOME/.bashrc > temp_bashrc
-  echo "source $INSTALL_DIR/acc_env_vars" >> temp_bashrc
-  tail -n +$TAIL_NUM $HOME/.bashrc >> temp_bashrc
-  echo "source $INSTALL_DIR/acc_env_vars" >> temp_bashrc
-  mv temp_bashrc $HOME/.bashrc
+  cat <<EOT > $HOME/.bashrc
+# .bashrc
+
+FILE=$(pwd)/script_active
+CALLING_NODE=\$(echo \$SSH_CLIENT | awk '{print \$1}')
+NODE_IP_ADDR=$(hostname -i)
+if [ "\$CALLING_NODE" == "\$NODE_IP_ADDR" ] && [[ -f "\$FILE" ]]; then
+
+  # Source global definitions
+  if [ -f /etc/bashrc ]; then
+          . /etc/bashrc
+  fi
+
+  $MODS_TO_USE
+  $MODS_TO_UNLOAD
+  $MODS_TO_LOAD
+  source $INSTALL_DIR/acc_env_vars
+else
+
+EOT
+  cat $HOME/.good_bashrc >> $HOME/.bashrc
+  echo "fi" >> $HOME/.bashrc
 fi
 source $HOME/.bashrc
 

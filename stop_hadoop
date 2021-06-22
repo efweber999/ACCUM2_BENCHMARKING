@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script stops Hadoop and Zookeeper and cleans up.
 
 # Location of existing directory on shared file system of installed software.
@@ -9,6 +9,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 echo ""
 echo "Stopping Proxy Server"
@@ -46,3 +48,4 @@ echo ""
 echo "Before launching the acc_test_sw_install again, run the reset script."
 echo ""
 
+rm script_active

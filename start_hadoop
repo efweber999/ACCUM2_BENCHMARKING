@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script launches Zookeeper and Hadoop.
 # The acc_test_sw_install script must be run first.
 
@@ -10,6 +10,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 echo ""
 echo "Starting Zookeeper"
@@ -74,3 +76,5 @@ echo "NOTE: TO RUN HADOOP COMMANDS FROM THE COMMAND LINE YOU MUST FIRST:"
 echo "source acc_test.conf"
 echo "source \$INSTALL_DIR/acc_env_vars"
 echo ""
+
+rm script_active

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber 
+# June 2021 - Gene Weber 
 # This script stops the nohup'd moru mapreduce job.
 # All settings for this test are in acc_test.conf.
 
@@ -10,6 +10,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/moru.pid"
 echo "Stopping Moru table test on $MT_NODE"
@@ -20,3 +22,4 @@ pdsh -w $MT_NODE "source temp2" 2>/dev/null
 pdsh -w $MT_NODE "kill \$(cat $PIDFILE) 2>/dev/null" 2>/dev/null
 pdsh -w $MT_NODE "rm $PIDFILE temp1 temp2"
 
+rm script_active

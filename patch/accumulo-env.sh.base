@@ -22,3 +22,19 @@
 < "${bin}"/accumulo-util build-native &> /dev/null
 ---
 > # "${bin}"/accumulo-util build-native &> /dev/null
+81,85c81,85
+<   master)  JAVA_OPTS=("${JAVA_OPTS[@]}" '-Xmx512m' '-Xms512m') ;;
+<   monitor) JAVA_OPTS=("${JAVA_OPTS[@]}" '-Xmx256m' '-Xms256m') ;;
+<   gc)      JAVA_OPTS=("${JAVA_OPTS[@]}" '-Xmx256m' '-Xms256m') ;;
+<   tserver) JAVA_OPTS=("${JAVA_OPTS[@]}" '-Xmx768m' '-Xms768m') ;;
+<   *)       JAVA_OPTS=("${JAVA_OPTS[@]}" '-Xmx256m' '-Xms64m') ;;
+---
+>   master)  JAVA_OPTS=("${JAVA_OPTS[@]}" 'MSTR_MEM_HI' 'MSTR_MEM_LO') ;;
+>   monitor) JAVA_OPTS=("${JAVA_OPTS[@]}" 'MON_MEM_HI' 'MON_MEM_LO') ;;
+>   gc)      JAVA_OPTS=("${JAVA_OPTS[@]}" 'GC_MEM_HI' 'GC_MEM_LO') ;;
+>   tserver) JAVA_OPTS=("${JAVA_OPTS[@]}" 'TSRV_MEM_HI' 'TSRV_MEM_LO') ;;
+>   *)       JAVA_OPTS=("${JAVA_OPTS[@]}" 'DFLT_MEM_HI' 'DFLT_MEM_LO') ;;
+116c116
+<   *)      export LD_LIBRARY_PATH="${HADOOP_HOME}/lib/native:${LD_LIBRARY_PATH}" ;;
+---
+>   *)      export LD_LIBRARY_PATH="LIB64:${ACCUMULO_HOME}/lib/native:${HADOOP_HOME}/lib/native" ;;

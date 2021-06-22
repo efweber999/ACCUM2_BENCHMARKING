@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber
+# June 2021 - Gene Weber
 # This script runs the run_walk test for the time period specified in acc_test.conf.
 # It calls the run_walk and stop_walk scripts.
 #
@@ -16,6 +16,8 @@ COMMAND_OPTION=$1
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 # Verify that a Continuous Ingest table exists.
 echo ""
@@ -153,3 +155,5 @@ The read rate for this cluster is: $READ_RATE entries per second.\n \
 rm /$LOCAL_NVME1/walk_fsr 2>/dev/null
 rm /$LOCAL_NVME1/hdfs_temp 2>/dev/null
 rm /$LOCAL_NVME1/*walk_*.log 2>/dev/null
+
+rm script_active

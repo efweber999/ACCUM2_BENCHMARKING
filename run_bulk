@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber 
+# June 2021 - Gene Weber 
 # This script simply launches the bulk_ingest script on the specified node.
 # See the bulk_ingest script for more information.
 
@@ -10,6 +10,8 @@ INSTALL_DIR=$(cat inst_dir)
 source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
+# Set bashrc flag
+touch script_active
 
 # Only move files and run via pdsh if running on a differnt node than logged into
 if [[ "$BI_NODE" != "$LOCAL_NODE" ]]; then
@@ -23,3 +25,5 @@ if [[ "$BI_NODE" != "$LOCAL_NODE" ]]; then
 else
   ./bulk_ingest
 fi
+
+rm script_active
