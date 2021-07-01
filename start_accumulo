@@ -60,47 +60,65 @@ echo ""
 echo "Starting the Accumulo Tablet Servers"
 echo ""
 
-# Start the accumulo tablet servers
-# Play a game with accumulo-env.sh to make every tserver on a node have a unique ProcessName in the metrics file.
-# See: https://github.com/apache/accumulo/issues/1337
-cp -n $ACCUMULO_CONF_DIR/accumulo-env.sh $ACCUMULO_CONF_DIR/X_accumulo-env.sh
-for node in $ACC_TSERVER_NODES
+# Create tservers launch file
+rm $INSTALL_DIR/lnch_tsrvrs 2>/dev/null
+touch $INSTALL_DIR/lnch_tsrvrs
+chmod 755 $INSTALL_DIR/lnch_tsrvrs
+for (( i=1; i<=$TABS_PER_NODE; i++ ))
 do
-  for (( i=1; i<=$TABS_PER_NODE; i++ ))
-  do
-    echo "Starting tserver-${i} on $node"
-    LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.log"
-    ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${node}_${i}.err"
-    # Temporarily add two lines to the end of accumulo-env.sh modifying the JAVA_OPTS variable.
-    # echo "JAVA_OPTS=(\"\${JAVA_OPTS[@]}\" \"-Daccumulo.metrics.service.instance=$i\")" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
-    # echo "export JAVA_OPTS" >> $ACCUMULO_CONF_DIR/accumulo-env.sh
-    # Need to wait till tserver starts before restoring accumulo-env.sh
-    # Capture the current number of tserver processes running on the node. Wait until the new one is
-    # also running, or until a watchdog timer indicates it didn't start.
-    INIT_PROCS=$(pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}')
-    NUM_PROCS=$INIT_PROCS; WATCHDOG=0
-    pdsh -w $node "nohup accumulo tserver >$LOGFILE 2>$ERRFILE < /dev/null &"
-    while [ $INIT_PROCS -eq $NUM_PROCS ]
-    do
-      NUM_PROCS=$(pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | wc -l" | awk '{print $2}')
-      ((WATCHDOG++))
-      if [ $WATCHDOG -ge 100 ]; then
-        NUM_PROCS=999
-        echo "tserver did not start."
-      fi
-    done
-    # Now that tserver process has started (hopefully) restore the accumulo-env.sh file.
-    # cp $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
-  done
+  LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${i}.log"
+  ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/tserver_${i}.err"
+  echo "nohup accumulo tserver >$LOGFILE 2>$ERRFILE < /dev/null &" >> $INSTALL_DIR/lnch_tsrvrs
 done
-# "Permanently" restore the file now that loop is complete.
-mv $ACCUMULO_CONF_DIR/X_accumulo-env.sh $ACCUMULO_CONF_DIR/accumulo-env.sh
-# Separate loop gives processes some time to startup
+# Copy the launch file to local drive. This is more for AWS where nfs is slow!
+pdsh -w ^$INSTALL_DIR/acctservernodes 'cp $INSTALL_DIR/lnch_tsrvrs /$LOCAL_NVME1' 
+
+# Start the accumulo tablet servers.
+echo "Launching $TABS_PER_NODE Tablet Servers on each of these nodes:"
+echo $ACC_TSERVER_NODES
+pdsh -w ^$INSTALL_DIR/acctservernodes 'nohup /$LOCAL_NVME1/lnch_tsrvrs &' &
+# Capture start time.
+TBLTS_START=$(date +%s)
+
+# Allow some time for all tserver processes to start.
+echo "Waiting $TSS_WAIT_TIME seconds for all Tablet Servers to start."
+sleep ${TSS_WAIT_TIME}s
+
+# Collect all tserver PIDs
+echo "Collecting all Tablet Server PIDs."
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/tservers.pid"
-for node in $ACC_TSERVER_NODES
+pdsh -w ^$INSTALL_DIR/acctservernodes "ps -fu $LOGNAME | grep '.* tserver$' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+
+# Verify the Tablet Servers
+cat <<EOT > $INSTALL_DIR/tsrv_verify
+LONGEST=0
+NUM_PIDS=0
+for pid in \$(cat $PIDFILE)
 do
-  pdsh -w $node "ps -fu $LOGNAME | grep '.* tserver$' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+  ((NUM_PIDS++))
+  TEMP1=\$(export TZ=UTC0 LC_ALL=C; date -d "\$(ps -o lstart= \$pid)" +%s)
+  TEMP=\$((\$TEMP1 - $TBLTS_START))
+  if (( \$TEMP > \$LONGEST )); then
+    LONGEST=\$TEMP
+  fi
 done
+
+if (($TABS_PER_NODE > \$NUM_PIDS)); then
+  echo "ERROR! -> Only \$NUM_PIDS of $TABS_PER_NODE Tablet Servers are running!"
+else
+  echo "All Tablet Servers started within \$LONGEST seconds."
+fi
+EOT
+# Copy file to local drives and launch them.
+chmod 755 $INSTALL_DIR/tsrv_verify
+pdsh -w ^$INSTALL_DIR/acctservernodes 'cp $INSTALL_DIR/tsrv_verify /$LOCAL_NVME1' 
+pdsh -w ^$INSTALL_DIR/acctservernodes '/$LOCAL_NVME1/tsrv_verify' 
+
+# Clean up
+rm $INSTALL_DIR/lnch_tsrvrs 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes 'rm /$LOCAL_NVME1/lnch_tsrvrs 2>/dev/null' 2>/dev/null
+rm $INSTALL_DIR/tsrv_verify 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes 'rm /$LOCAL_NVME1/tsrv_verify 2>/dev/null' 2>/dev/null
 
 echo ""
 echo "Starting the Accumulo Masters"
@@ -137,6 +155,7 @@ if [ $INSTALL_PROXY = true ]; then
                                         >$LOGFILE 2>$ERRFILE < /dev/null &"
   pdsh -w ^$INSTALL_DIR/acc_proxy_node "ps -fu $LOGNAME | grep '.*bin\/accumulo-proxy ' | sed 's/^$LOGNAME *//' |\
                                         sed 's/\ .*$//' >$PIDFILE"
+  touch $INSTALL_DIR/acc_proxy_running
 fi
 
 # Run a command in the accumulo shell as a simple test.
@@ -156,7 +175,7 @@ echo "http://$PROXY:9995/monitor"
 echo ""
 
 echo ""
-echo "If this looked successful you can now run the accumulo_tests script."
+echo "If this looked successful you can now run accumulo tests."
 echo "The stop_accumulo script will terminate accumulo processes and clean up."
 echo ""
 echo "NOTE: TO RUN ACCUMULO COMMANDS FROM THE COMMAND LINE YOU MUST FIRST:"

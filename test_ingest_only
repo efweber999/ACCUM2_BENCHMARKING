@@ -84,10 +84,22 @@ PP_ST=$(date +%s)
 
 # Take the ci table offline so the rfiles are stable during results processing.
 echo ""
-echo "Taking ci table offline. Waiting $OFFLINE_TAB_WAIT for that to complete."
+echo "Taking ci table offline. Waiting until all compactions have ceased."
+echo "If FileNotFoundException occurs during processing, increase rfile cycle check time."
 echo ""
 echo -e "flush -t ci -w\noffline -t ci -w\nbye\n" | accumulo shell -u root
-sleep $OFFLINE_TAB_WAIT
+# Loop until the rfiles stop changing.
+OLD_RFILES="initialize"
+RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/.*\.rf$" | awk '{print $8}')
+while [[ $OLD_RFILES != $RFILES ]]
+do
+  echo "Allowing compaction more time. Will check again in $RFILE_CHECK minutes."
+  sleep ${RFILE_CHECK}m
+  OLD_RFILES=$RFILES
+  RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/.*\.rf$" | awk '{print $8}')
+done
+echo "Compactions appear to have completed."
+echo ""
 
 # Get the total number of nodes available for post processing.
 NUM_NODES=$(cat $INSTALL_DIR/all_nodes | wc -l)
@@ -96,10 +108,6 @@ NUM_NODES=$(cat $INSTALL_DIR/all_nodes | wc -l)
 # with spaces (the default field seperator)
 TEMP=$(tr '\012' ' ' < $INSTALL_DIR/all_nodes)
 NODE_LIST=($TEMP) # split to array $NODE_LIST
-
-# Generate a full HDFS path list of all rfiles associated with the ci table.
-echo ""; echo "Getting a list of all ci rfiles."
-RFILES=$(hdfs dfs -ls -R /accumulo | grep "tables\/[2-9]\/.*\.rf$" | awk '{print $8}')
 
 # Create a run file for each of the nodes to execute. 1st line removes old value file.
 echo ""; echo "Creating processing run files."
@@ -161,12 +169,6 @@ PP_ET=$(date +%s)
 # Calculate duration of post processing
 PP_SECS=$(( $PP_ET - $PP_ST ))
 PP_DUR=$(eval "echo $(date -ud "@$PP_SECS" +'$((%s/3600/24)) days %H hours %M minutes %S seconds')")
-
-# Bring the ci table back online so it is available for walk tests.
-echo ""
-echo "Bringing the ci table back online."
-echo ""
-echo -e "online -t ci -w\nbye\n" | accumulo shell -u root
 
 # Sum the number of entries that were listed in every rfile.
 TABLE_ENTRIES=$(cat /$LOCAL_NVME1/rfile_vals* | awk '{sum+=$1};END{print sum}')

@@ -52,6 +52,8 @@ pdsh -w ^$INSTALL_DIR/all_nodes "rm -r /$LOCAL_NVME1/hadoop 2>/dev/null" 2>/dev/
 
 # Remove inst_dir file from all nodes.
 pdsh -w ^$INSTALL_DIR/all_nodes "rm inst_dir 2>/dev/null" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes "rm /$LOCAL_NVME1/inst_dir 2>/dev/null" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes "rm /$LOCAL_NVME1/nohup.out 2>/dev/null" 2>/dev/null
 
 # Remove environment files from shared installation folder
 rm $INSTALL_DIR/acc_env_vars

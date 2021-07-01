@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber 
+# June 2021 - Gene Weber 
 # This script is called by others and stops clients on the nodes running tservers.
 # The calling script passes in the type of client to stop as $1.
-# Used 3 loops instaed of 1 to improve accurace of test timing.
 # All settings for this test are in acc_test.conf.
 
 CLIENT_TYPE=$1
@@ -15,29 +14,36 @@ source acc_test.conf
 # Get all needed environmental variables.
 source $INSTALL_DIR/acc_env_vars
 
-# Loop through each tserver node and create the file to kill processes.
+# Create files to kill processes on each tserver node.
 PIDDIR="/$LOCAL_NVME1/$A_PID_DIR"
 PIDFILE="$PIDDIR/${CLIENT_TYPE}_clients.pid"
-echo "Preparing to stop clients."
-for node in $ACC_TSERVER_NODES
-do
-  # Using pkill to kill the children of the PIDs
-  pdsh -w $node "cat $PIDFILE | sed 's/^.*$/pkill -P /' > $PIDDIR/temp1"
-  pdsh -w $node "paste $PIDDIR/temp1 $PIDFILE >  $PIDDIR/temp2"
-done
+echo "Creating kill file to stop clients."
+# Using pkill to kill the children of the PIDs
+pdsh -w ^$INSTALL_DIR/acctservernodes "cat $PIDFILE | sed 's/^.*$/pkill -P /' > $PIDDIR/temp1"
+pdsh -w ^$INSTALL_DIR/acctservernodes "paste $PIDDIR/temp1 $PIDFILE >  $PIDDIR/temp2"
 
-# Loop through each tserver node and kill $CLIENT_TYPE clients on each
+# Kill $CLIENT_TYPE on each tserver node.
 echo $(date +%s) > client_stop
-for node in $ACC_TSERVER_NODES
-do
-  echo "Stopping $CLIENT_TYPE clients on $node"
-  pdsh -w $node "source $PIDDIR/temp2" 2>/dev/null # Don't background. Causes race with next line.
-  pdsh -w $node "kill \$(cat $PIDFILE) 2>/dev/null" 2>/dev/null &
-done
+echo "Stopping $CLIENT_TYPE clients on each of these nodes:"
+echo $ACC_TSERVER_NODES
+pdsh -w ^$INSTALL_DIR/acctservernodes "source $PIDDIR/temp2" 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes "kill \$(cat $PIDFILE) 2>/dev/null" 2>/dev/null
 
-# Loop through each tserver node delete files
-for node in $ACC_TSERVER_NODES
-do
-  pdsh -w $node "rm $PIDFILE $PIDDIR/temp1 $PIDDIR/temp2" &
-done
+# Verify that all processes have been killed.
+echo ""; echo "Verifying that processes are stopped."
+cat <<EOT > $INSTALL_DIR/dead_yet
+STILL_ALIVE=\$(ps -fu $LOGNAME | grep "\ $CLIENT_TYPE\ " | wc -l)
+if (( \$STILL_ALIVE > 0 )); then
+  echo "ERROR! -> \$STILL_ALIVE $CLIENT_TYPE clients are still running."
+fi
+EOT
+# Copy file to local drives and launch them.
+chmod 755 $INSTALL_DIR/dead_yet
+pdsh -w ^$INSTALL_DIR/acctservernodes 'cp $INSTALL_DIR/dead_yet /$LOCAL_NVME1'
+pdsh -w ^$INSTALL_DIR/acctservernodes '/$LOCAL_NVME1/dead_yet'
+
+# Clean up
+pdsh -w ^$INSTALL_DIR/acctservernodes "rm $PIDFILE $PIDDIR/temp1 $PIDDIR/temp2" &
+rm $INSTALL_DIR/dead_yet 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes 'rm /$LOCAL_NVME1/dead_yet 2>/dev/null' 2>/dev/null
 

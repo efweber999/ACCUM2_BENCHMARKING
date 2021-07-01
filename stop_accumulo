@@ -13,16 +13,19 @@ source $INSTALL_DIR/acc_env_vars
 # Set bashrc flag
 touch script_active
 
-echo ""
-echo "Stopping the Accumulo Proxy"
-echo ""
-
-# Stop the accumulo Proxy
-PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/acc_proxy.pid"
-# Using pkill to kill the children of the PID
-pdsh -w ^$INSTALL_DIR/acc_proxy_node "pkill -P \$(cat $PIDFILE)"
-pdsh -w ^$INSTALL_DIR/acc_proxy_node "kill \$(cat $PIDFILE)" 2>/dev/null
-pdsh -w ^$INSTALL_DIR/acc_proxy_node "rm $PIDFILE"
+if [ -f $INSTALL_DIR/acc_proxy_running ]; then
+  echo ""
+  echo "Stopping the Accumulo Proxy"
+  echo ""
+  
+  # Stop the accumulo Proxy
+  PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/acc_proxy.pid"
+  # Using pkill to kill the children of the PID
+  pdsh -w ^$INSTALL_DIR/acc_proxy_node "pkill -P \$(cat $PIDFILE)"
+  pdsh -w ^$INSTALL_DIR/acc_proxy_node "kill \$(cat $PIDFILE)" 2>/dev/null
+  pdsh -w ^$INSTALL_DIR/acc_proxy_node "rm $PIDFILE"
+  rm $INSTALL_DIR/acc_proxy_running
+fi
 
 echo ""
 echo "Stopping the Accumulo Tracer"
@@ -46,17 +49,13 @@ echo ""
 pdsh -w ^$INSTALL_DIR/accmasternodes 'accumulo-service master stop'
 
 echo ""
-echo "Stopping the Accumulo Tablet Servers"
-echo ""
+echo "Stopping the Accumulo Tablet Servers on each of these nodes:"
+echo "$ACC_TSERVER_NODES"
 
 # Stop the accumulo tablet servers
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/tservers.pid"
-for node in $ACC_TSERVER_NODES
-do
-  echo "Stopping tservers on $node"
-  pdsh -w $node "kill \$(cat $PIDFILE)"
-  pdsh -w $node "rm $PIDFILE"
-done
+pdsh -w ^$INSTALL_DIR/acctservernodes "kill \$(cat $PIDFILE) 2>/dev/null" 2>/dev/null &
+pdsh -w ^$INSTALL_DIR/acctservernodes "rm $PIDFILE 2>/dev/null" 2>/dev/null &
 
 echo ""
 echo "Stopping the Accumulo Monitor"
@@ -79,6 +78,27 @@ echo ""
 
 hdfs dfs -rm -skipTrash -r /accumulo
 hdfs dfsadmin -report >/dev/null # This seems to force reclaimation of HDFS disk space.
+
+# Verify that all Accumulo processes have been stopped.
+echo ""; echo "Verifying that all Accumulo processes are stopped."
+cat <<EOT > $INSTALL_DIR/dead_yet
+ACC_PROCS="tserver master monitor gc tracer"
+for proc in \$ACC_PROCS
+do
+  STILL_ALIVE=\$(ps -fu $LOGNAME | grep "\ \$proc\$" | wc -l)
+  if (( \$STILL_ALIVE > 0 )); then
+    echo "ERROR! -> \$STILL_ALIVE Accumulo \$proc process(s) still running."
+  fi
+done
+EOT
+# Copy file to local drives and launch them.
+chmod 755 $INSTALL_DIR/dead_yet
+pdsh -w ^$INSTALL_DIR/all_nodes 'cp $INSTALL_DIR/dead_yet /$LOCAL_NVME1'
+pdsh -w ^$INSTALL_DIR/all_nodes '/$LOCAL_NVME1/dead_yet'
+
+# Clean up
+rm $INSTALL_DIR/dead_yet 2>/dev/null
+pdsh -w ^$INSTALL_DIR/all_nodes 'rm /$LOCAL_NVME1/dead_yet 2>/dev/null' 2>/dev/null
 
 echo ""
 echo "If this looked successful, it's now safe to stop hadoop."

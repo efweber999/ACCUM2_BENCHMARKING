@@ -697,6 +697,7 @@ if [ "\$CALLING_NODE" == "\$NODE_IP_ADDR" ] && [[ -f "\$FILE" ]]; then
   $MODS_TO_USE
   $MODS_TO_UNLOAD
   $MODS_TO_LOAD
+  source $(pwd)/acc_test.conf
   source $INSTALL_DIR/acc_env_vars
 else
 

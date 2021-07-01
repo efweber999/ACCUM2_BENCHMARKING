@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# May 2021 - Gene Weber 
+# June 2021 - Gene Weber 
 # This script launches ingest clients on the nodes running tservers.
 # It's recommended to run 1-3 clients per teserver on the node.
 #
@@ -43,11 +43,8 @@ if [ "$COMMAND_OPTION" == "split" ]; then
        | accumulo shell -u root
 fi
 
-# Loop through each tserver node and remove any old logs
-for node in $ACC_TSERVER_NODES
-do
-  pdsh -w $node "rm $LOCAL_NVME1/$ACC_LOG_DIR/ingest_* 2>/dev/null" 2>/dev/null &
-done
+# Remove all old ingest logs.
+pdsh -w ^$INSTALL_DIR/acctservernodes "rm /$LOCAL_NVME1/$ACC_LOG_DIR/ingest_* 2>/dev/null" 2>/dev/null &
 
 # Give Accumulo time to apply tablet splits and stabilize.
 if [ "$COMMAND_OPTION" == "split" ]; then
@@ -61,32 +58,63 @@ echo "Giving Accumulo $WAIT_TIME to become stable"
 echo ""
 sleep $WAIT_TIME
 
-# Loop through each tserver node and launch ingest clients on each
-for node in $ACC_TSERVER_NODES
+# Create ingest clients launch file
+rm $INSTALL_DIR/lnch_iclients 2>/dev/null
+touch $INSTALL_DIR/lnch_iclients
+chmod 755 $INSTALL_DIR/lnch_iclients
+for (( i=1; i<=$INGEST_CLI_NODE; i++ ))
 do
-  for (( i=1; i<=$INGEST_CLI_NODE; i++ ))
-  do
-    echo "Starting ingest client-${i} on $node"
-    LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.log"
-    ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${node}_${i}.err"
-    # CI_OPTS (continuous ingest options) are set in acc_test.conf
-    # The following optimizes differently on different systems.
-    if [ "$AWS" = true ]; then
-      pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &" &
-    else
-      pdsh -w $node "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &"
-    fi
-  done
+  LOGFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${i}.log"
+  ERRFILE="/$LOCAL_NVME1/$ACC_LOG_DIR/ingest_${i}.err"
+  echo "nohup cingest ingest $CI_OPTS >$LOGFILE 2>$ERRFILE < /dev/null &" >> $INSTALL_DIR/lnch_iclients
 done
-echo $(date +%s) > ingest_start #Capture start time.
+# Copy the launch file to local drive. This is more for AWS where nfs is slow!
+pdsh -w ^$INSTALL_DIR/acctservernodes 'cp $INSTALL_DIR/lnch_iclients /$LOCAL_NVME1'
 
-# Loop through each tserver node and write the associated pids to the PID file.
+# Start the accumulo tablet servers.
+echo "Launching $INGEST_CLI_NODE Ingest Clients on each of these nodes:"
+echo $ACC_TSERVER_NODES
+pdsh -w ^$INSTALL_DIR/acctservernodes 'nohup /$LOCAL_NVME1/lnch_iclients &' &
+# Capture start time.
+ING_START=$(date +%s)
+echo $ING_START > ingest_start
+
+# Allow some time for all client processes to start.
+echo "Waiting $ICS_WAIT_TIME seconds for all Ingest Clients to start."
+sleep ${ICS_WAIT_TIME}s
+
+# Collect all ingest client PIDs
+echo "Collecting all Ingest Client PIDs."
 PIDFILE="/$LOCAL_NVME1/$A_PID_DIR/ingest_clients.pid"
-echo ""
-echo "Collecting and saving pid information."
-sleep 5 # Make sure clients hace a chance to start.
-for node in $ACC_TSERVER_NODES
+pdsh -w ^$INSTALL_DIR/acctservernodes "ps -fu $LOGNAME | grep '\ ingest\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE"
+
+# Verify the Ingest Clients
+cat <<EOT > $INSTALL_DIR/iclient_verify
+LONGEST=0
+NUM_PIDS=0
+for pid in \$(cat $PIDFILE)
 do
-  pdsh -w $node "ps -fu $LOGNAME | grep '\ ingest\ ' | sed 's/^$LOGNAME *//' | sed 's/\ .*$//' >$PIDFILE" &
+  ((NUM_PIDS++))
+  TEMP1=\$(export TZ=UTC0 LC_ALL=C; date -d "\$(ps -o lstart= \$pid)" +%s)
+  TEMP=\$((\$TEMP1 - $ING_START))
+  if (( \$TEMP > \$LONGEST )); then
+    LONGEST=\$TEMP
+  fi
 done
 
+if (($INGEST_CLI_NODE > \$NUM_PIDS)); then
+  echo "ERROR! -> Only \$NUM_PIDS of $INGEST_CLI_NODE Ingest Clients are running!"
+else
+  echo "All Ingest Clients started within \$LONGEST seconds."
+fi
+EOT
+# Copy file to local drives and launch them.
+chmod 755 $INSTALL_DIR/iclient_verify
+pdsh -w ^$INSTALL_DIR/acctservernodes 'cp $INSTALL_DIR/iclient_verify /$LOCAL_NVME1'
+pdsh -w ^$INSTALL_DIR/acctservernodes '/$LOCAL_NVME1/iclient_verify'
+
+# Clean up
+rm $INSTALL_DIR/lnch_iclients 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes 'rm /$LOCAL_NVME1/lnch_iclients 2>/dev/null' 2>/dev/null
+rm $INSTALL_DIR/iclient_verify 2>/dev/null
+pdsh -w ^$INSTALL_DIR/acctservernodes 'rm /$LOCAL_NVME1/iclient_verify 2>/dev/null' 2>/dev/null

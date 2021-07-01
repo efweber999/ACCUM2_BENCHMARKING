@@ -13,6 +13,12 @@ source $INSTALL_DIR/acc_env_vars
 # Set bashrc flag
 touch script_active
 
+# Bring the ci table back online so it is available for walk tests.
+echo ""
+echo "Bringing the ci table back online."
+echo ""
+echo -e "online -t ci -w\nbye\n" | accumulo shell -u root
+
 # Only move files and run via pdsh if running on a different node than logged into
 if [[ "$VER_NODE" != "$LOCAL_NODE" ]]; then
   cp inst_dir verify_table acc_test.conf $INSTALL_DIR
