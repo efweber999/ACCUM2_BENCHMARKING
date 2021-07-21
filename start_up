@@ -1,4 +1,3 @@
+# July 2021 - Gene Weber
 # $1 is "split" or nothing for no pre-split
-./acc_test_sw_install
-./start_hadoop
-./start_accumulo $1
+{ ./acc_test_sw_install && ./start_hadoop ;} && ./start_accumulo $1

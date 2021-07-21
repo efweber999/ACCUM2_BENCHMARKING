@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# June 2021 - Gene Weber
+# July 2021 - Gene Weber
 # This script runs an ingest test until the specified percentage of HDFS file system is filled.
 # It calls the run_ingest and stop ingest scripts.
 #
@@ -221,7 +221,8 @@ The ingest rate for this cluster is: $INGEST_RATE entries per second.\n \
 # Clean up 
 pdsh -w ^$INSTALL_DIR/all_nodes "rm /$LOCAL_NVME1/rfile_* 2>/dev/null" & 2>/dev/null
 
-echo "Please run ./run_verify to check the integrity of the CI table."
+echo "Use ./run_verify if you wish to check the integrity of the CI table."
+echo "WARNING: This can take a significant amount of time."
 echo ""
 
 rm script_active

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# June 2021 - Gene Weber
+# July 2021 - Gene Weber
 # This script installs all software necessary to run an Accumulo 2.0.1 baseline test.
 # This includes: Maven 3.6.3, Zookeeper 3.6.2, hadoop 3.1.2, accumulo 2.0.1, and accumulo-testing 2.0
 # It optionally installs Accumulo Proxy 2.0.0
@@ -480,7 +480,7 @@ cat patch/accumulo-env.sh.base |\
  sed "s|HADOOP_HOME_PATH|$HADOOP_HOME|" |\
  sed "s|HADOOP_CONF_DIR_PATH|$HADOOP_CONF_DIR|" |\
  sed "s|ZOOKEEPER_HOME_PATH|$ZOO_HOME|" |\
- sed "s|LIB64|$ZLIB64|" |\
+ sed "s|LIB64|$LIB64|" |\
  sed "s|MSTR_MEM_HI|$MSTR_MEM_HI|" |\
  sed "s|MSTR_MEM_LO|$MSTR_MEM_LO|" |\
  sed "s|MON_MEM_HI|$MON_MEM_HI|" |\
